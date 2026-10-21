@@ -82,6 +82,10 @@ export default function AttendancePage() {
   }, [records]);
 
   const handleSave = async (syncStatus: SyncStatus = 'local') => {
+    if (!user) {
+      addToast({ type: 'error', title: 'Sign-in required', message: 'Please sign in again before saving attendance.' });
+      return;
+    }
     setIsSaving(true);
     try {
       const now = new Date().toISOString();
@@ -92,7 +96,7 @@ export default function AttendancePage() {
         date,
         status: records[s.id]?.status || 'present',
         remarks: records[s.id]?.remarks || '',
-        recordedBy: user?.id || 'demo-owner',
+        recordedBy: user.id,
         syncStatus,
         createdAt: now,
         updatedAt: now,

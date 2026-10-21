@@ -110,7 +110,7 @@ export default function NewStaffPage() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <ShieldAlert className="h-5 w-5 text-amber-500" />
-                <CardTitle>Sensitive Information (Admin Only)</CardTitle>
+                <CardTitle>Sensitive Information (Owner Only)</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">

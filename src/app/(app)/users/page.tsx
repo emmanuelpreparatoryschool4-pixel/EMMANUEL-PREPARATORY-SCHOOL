@@ -77,7 +77,7 @@ export default function UsersPage() {
 
       <Card className="p-4">
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <strong>Demo Mode:</strong> Create the owner and headmaster accounts in Supabase Auth after connecting the backend.
+          <strong>Account setup:</strong> Create Supabase Auth accounts for school users; only owner and headmaster profiles appear here.
         </div>
         {loadError && <p role="alert" className="mb-4 text-sm text-red-700">{loadError}</p>}
         <Table columns={columns} data={users} keyExtractor={(u) => u.id} isLoading={isLoading} />

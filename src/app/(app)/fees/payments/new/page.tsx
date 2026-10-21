@@ -48,6 +48,10 @@ export default function NewPaymentPage() {
   }, [selectedStudent, setValue]);
 
   const onSubmit = async (data: PaymentFormValues) => {
+    if (!user) {
+      addToast({ type: 'error', title: 'Sign-in required', message: 'Please sign in again before recording a payment.' });
+      return;
+    }
     setIsSubmitting(true);
     try {
       const amountInPesewas = Math.round(data.amount * 100);
@@ -60,7 +64,7 @@ export default function NewPaymentPage() {
         paymentDate: data.paymentDate,
         paymentMethod: data.paymentMethod,
         transactionReference: data.transactionReference,
-        recordedBy: user?.id || 'demo-owner',
+        recordedBy: user.id,
         notes: data.notes,
         status: 'completed',
       });

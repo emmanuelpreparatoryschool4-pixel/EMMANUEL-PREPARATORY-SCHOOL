@@ -230,7 +230,7 @@ export interface Staff {
   schoolPortfolio?: string;
   tvetSkills?: string;
   
-  // Sensitive information (admin only)
+  // Sensitive information (owner only)
   ssnitNumber?: string;
   tin?: string;
   ghanaCardNumber?: string;

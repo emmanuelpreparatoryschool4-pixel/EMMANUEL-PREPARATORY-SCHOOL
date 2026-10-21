@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { useToast } from '@/contexts/ToastContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { studentSchema, type StudentFormValues } from '@/lib/validations';
 import { dataService } from '@/lib/db';
 import { generateStudentId, generateAdmissionNumber } from '@/lib/utils';
@@ -20,6 +21,7 @@ import { Class, AcademicYear } from '@/types';
 export default function NewStudentPage() {
   const router = useRouter();
   const { addToast } = useToast();
+  const { user } = useAuth();
   const [classes, setClasses] = useState<Class[]>([]);
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -71,6 +73,7 @@ export default function NewStudentPage() {
   }, [setValue]);
 
   const onSubmit = async (data: StudentFormValues) => {
+    if (!user) return;
     setIsSubmitting(true);
     try {
       const studentId = await dataService.addStudent({
@@ -87,8 +90,8 @@ export default function NewStudentPage() {
       }
 
       await dataService.addActivityLog({
-        userId: 'demo-owner',
-        userName: 'Admin User',
+        userId: user.id,
+        userName: user.name,
         action: 'Enrolled new student',
         entityType: 'student',
         entityId: studentId,

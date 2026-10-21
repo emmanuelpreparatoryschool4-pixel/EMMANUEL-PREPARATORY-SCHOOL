@@ -176,18 +176,3 @@ export const PAGE_SIZE_OPTIONS: SelectOption[] = [
   { value: '50', label: '50 per page' },
   { value: '100', label: '100 per page' },
 ];
-
-export const DEMO_ACCOUNTS = [
-  {
-    role: 'owner' as const,
-    email: 'owner@eps.edu.gh',
-    password: 'owner123',
-    name: 'School Owner',
-  },
-  {
-    role: 'headmaster' as const,
-    email: 'headmaster@eps.edu.gh',
-    password: 'headmaster123',
-    name: 'Headmaster',
-  },
-];

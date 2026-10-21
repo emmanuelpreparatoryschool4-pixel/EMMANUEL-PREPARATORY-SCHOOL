@@ -1,4 +1,3 @@
-import Dexie, { type Table } from 'dexie';
 import {
   User,
   SchoolSettings,
@@ -37,73 +36,415 @@ import {
   DEFAULT_GRADING_SCALE,
 } from './constants';
 import { generateId } from './utils';
+import { supabase } from './supabase';
 
-export class EPSDatabase extends Dexie {
-  users!: Table<User>;
-  schoolSettings!: Table<SchoolSettings>;
-  academicYears!: Table<AcademicYear>;
-  terms!: Table<Term>;
-  classes!: Table<Class>;
-  subjects!: Table<Subject>;
-  gradingScales!: Table<GradingScale>;
-  students!: Table<Student>;
-  guardians!: Table<Guardian>;
-  enrollmentHistory!: Table<EnrollmentHistory>;
-  staff!: Table<Staff>;
-  qualifications!: Table<Qualification>;
-  staffAssignments!: Table<StaffAssignment>;
-  attendanceRecords!: Table<AttendanceRecord>;
-  attendanceSessions!: Table<AttendanceSession>;
-  syncQueue!: Table<SyncQueueItem>;
-  assessmentTypes!: Table<AssessmentType>;
-  assessments!: Table<Assessment>;
-  assessmentScores!: Table<AssessmentScore>;
-  reportCards!: Table<ReportCard>;
-  feeCategories!: Table<FeeCategory>;
-  feeStructures!: Table<FeeStructure>;
-  invoices!: Table<Invoice>;
-  payments!: Table<Payment>;
-  financialAdjustments!: Table<FinancialAdjustment>;
-  inventoryItems!: Table<InventoryItem>;
-  inventoryMovements!: Table<InventoryMovement>;
-  activityLogs!: Table<ActivityLog>;
+export interface EPSDatabase {
+  users: SupabaseTable<User>;
+  schoolSettings: SupabaseTable<SchoolSettings>;
+  academicYears: SupabaseTable<AcademicYear>;
+  terms: SupabaseTable<Term>;
+  classes: SupabaseTable<Class>;
+  subjects: SupabaseTable<Subject>;
+  gradingScales: SupabaseTable<GradingScale>;
+  students: SupabaseTable<Student>;
+  guardians: SupabaseTable<Guardian>;
+  enrollmentHistory: SupabaseTable<EnrollmentHistory>;
+  staff: SupabaseTable<Staff>;
+  qualifications: SupabaseTable<Qualification>;
+  staffAssignments: SupabaseTable<StaffAssignment>;
+  attendanceRecords: SupabaseTable<AttendanceRecord>;
+  attendanceSessions: SupabaseTable<AttendanceSession>;
+  syncQueue: SupabaseTable<SyncQueueItem>;
+  assessmentTypes: SupabaseTable<AssessmentType>;
+  assessments: SupabaseTable<Assessment>;
+  assessmentScores: SupabaseTable<AssessmentScore>;
+  reportCards: SupabaseTable<ReportCard>;
+  feeCategories: SupabaseTable<FeeCategory>;
+  feeStructures: SupabaseTable<FeeStructure>;
+  invoices: SupabaseTable<Invoice>;
+  payments: SupabaseTable<Payment>;
+  financialAdjustments: SupabaseTable<FinancialAdjustment>;
+  inventoryItems: SupabaseTable<InventoryItem>;
+  inventoryMovements: SupabaseTable<InventoryMovement>;
+  activityLogs: SupabaseTable<ActivityLog>;
+}
 
-  constructor() {
-    super('EPSDatabase');
-    this.version(1).stores({
-      users: 'id, email, role',
-      schoolSettings: 'id',
-      academicYears: 'id, name, isCurrent, status',
-      terms: 'id, academicYearId, isCurrent, status',
-      classes: 'id, name, academicYearId, classTeacherId, status, order',
-      subjects: 'id, name, code, status',
-      gradingScales: 'id, name, isDefault',
-      students: 'id, studentId, admissionNumber, firstName, lastName, gender, currentClassId, academicYearId, enrollmentStatus',
-      guardians: 'id, studentId, isPrimaryContact',
-      enrollmentHistory: 'id, studentId, classId, academicYearId, status',
-      staff: 'id, staffId, firstName, lastName, gender, staffCategory, employmentStatus',
-      qualifications: 'id, staffId',
-      staffAssignments: 'id, staffId, classId, subjectId, academicYearId, status',
-      attendanceRecords: 'id, studentId, classId, date, status, syncStatus, [studentId+date]',
-      attendanceSessions: 'id, classId, date, termId, academicYearId, status',
-      syncQueue: 'id, entityType, entityId, status',
-      assessmentTypes: 'id, name, status',
-      assessments: 'id, name, assessmentTypeId, classId, subjectId, termId, academicYearId, teacherId, status',
-      assessmentScores: 'id, assessmentId, studentId, status',
-      reportCards: 'id, studentId, classId, termId, academicYearId, status',
-      feeCategories: 'id, name, status',
-      feeStructures: 'id, academicYearId, termId, classId, feeCategoryId, status',
-      invoices: 'id, invoiceNumber, studentId, classId, academicYearId, termId, status',
-      payments: 'id, receiptNumber, studentId, invoiceId, paymentDate, status',
-      financialAdjustments: 'id, studentId, invoiceId, type, status',
-      inventoryItems: 'id, inventoryCode, name, category, assignedClassId, status',
-      inventoryMovements: 'id, itemId, movementType',
-      activityLogs: 'id, userId, entityType, timestamp',
+type QueryFilter = { column: string; value: unknown };
+
+const tableNames: Record<string, string> = {
+  users: 'profiles',
+  schoolSettings: 'school_settings',
+  academicYears: 'academic_years',
+  terms: 'terms',
+  classes: 'classes',
+  subjects: 'subjects',
+  gradingScales: 'grading_scales',
+  students: 'students',
+  guardians: 'guardians',
+  enrollmentHistory: 'enrollment_history',
+  staff: 'staff',
+  qualifications: 'qualifications',
+  staffAssignments: 'staff_assignments',
+  attendanceRecords: 'attendance_records',
+  attendanceSessions: 'attendance_sessions',
+  syncQueue: 'sync_queue',
+  assessmentTypes: 'assessment_types',
+  assessments: 'assessments',
+  assessmentScores: 'assessment_scores',
+  reportCards: 'report_cards',
+  feeCategories: 'fee_categories',
+  feeStructures: 'fee_structures',
+  invoices: 'invoices',
+  payments: 'payments',
+  financialAdjustments: 'financial_adjustments',
+  inventoryItems: 'inventory_items',
+  inventoryMovements: 'inventory_movements',
+  activityLogs: 'activity_logs',
+};
+
+const conflictColumns: Record<string, string> = {
+  attendance_records: 'student_id,date',
+  assessment_scores: 'assessment_id,student_id',
+};
+
+function getSupabase() {
+  if (!supabase) throw new Error('Supabase is not configured. Add the project URL and anon key.');
+  return supabase;
+}
+
+function toSnakeCase(value: string): string {
+  return value.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+}
+
+function toCamelCase(value: string): string {
+  return value.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
+}
+
+function toDatabase(value: unknown, tableName: string, nested = false): unknown {
+  if (Array.isArray(value)) return value.map((item) => toDatabase(item, tableName, true));
+  if (!value || typeof value !== 'object' || value instanceof Date) return value;
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => {
+      let column = toSnakeCase(key);
+      if (!nested && tableName === 'classes' && key === 'order') column = 'display_order';
+      if (!nested && tableName === 'profiles' && key === 'name') column = 'full_name';
+      if (!nested && tableName === 'profiles' && key === 'avatar') column = 'avatar_url';
+      const normalized = column.endsWith('_date') && item === '' ? null : item;
+      return [column, toDatabase(normalized, tableName, true)];
+    })
+  );
+}
+
+function fromDatabase<T>(value: unknown, tableName: string, nested = false): T {
+  if (Array.isArray(value)) return value.map((item) => fromDatabase(item, tableName, true)) as T;
+  if (!value || typeof value !== 'object') return value as T;
+
+  return Object.fromEntries(
+    Object.entries(value).map(([column, item]) => {
+      let key = toCamelCase(column);
+      if (!nested && tableName === 'classes' && column === 'display_order') key = 'order';
+      if (!nested && tableName === 'profiles' && column === 'full_name') key = 'name';
+      if (!nested && tableName === 'profiles' && column === 'avatar_url') key = 'avatar';
+      return [key, fromDatabase(item, tableName, true)];
+    })
+  ) as T;
+}
+
+class SupabaseCollection<T> {
+  constructor(
+    protected readonly tableName: string,
+    private readonly filters: QueryFilter[] = [],
+    private readonly pendingColumn?: string,
+    private readonly orderColumn?: string,
+    private readonly ascending = true
+  ) {}
+
+  where(field: string): SupabaseCollection<T> {
+    return new SupabaseCollection(this.tableName, this.filters, toSnakeCase(field), this.orderColumn, this.ascending);
+  }
+
+  equals(value: unknown): SupabaseCollection<T> {
+    if (!this.pendingColumn) throw new Error('Call where(field) before equals(value).');
+    return new SupabaseCollection(
+      this.tableName,
+      [...this.filters, { column: this.pendingColumn, value }],
+      undefined,
+      this.orderColumn,
+      this.ascending
+    );
+  }
+
+  orderBy(field: string): SupabaseCollection<T> {
+    const column = this.tableName === 'classes' && field === 'order' ? 'display_order' : toSnakeCase(field);
+    return new SupabaseCollection(this.tableName, this.filters, undefined, column, true);
+  }
+
+  reverse(): SupabaseCollection<T> {
+    return new SupabaseCollection(
+      this.tableName,
+      this.filters,
+      this.pendingColumn,
+      this.orderColumn,
+      !this.ascending
+    );
+  }
+
+  toCollection(): SupabaseCollection<T> {
+    return this;
+  }
+
+  private applyFilters(query: ReturnType<ReturnType<typeof getSupabase>['from']>['select'] extends (...args: never[]) => infer R ? R : never) {
+    for (const filter of this.filters) query.eq(filter.column, filter.value);
+    if (this.orderColumn) query.order(this.orderColumn, { ascending: this.ascending });
+    return query;
+  }
+
+  async toArray(): Promise<T[]> {
+    const query = getSupabase().from(this.tableName).select('*');
+    const { data, error } = await this.applyFilters(query);
+    if (error) throw error;
+    return fromDatabase<T[]>(data ?? [], this.tableName);
+  }
+
+  async first(): Promise<T | undefined> {
+    const query = getSupabase().from(this.tableName).select('*');
+    const { data, error } = await this.applyFilters(query).limit(1).maybeSingle();
+    if (error) throw error;
+    return data ? fromDatabase<T>(data, this.tableName) : undefined;
+  }
+
+  async count(): Promise<number> {
+    const query = getSupabase().from(this.tableName).select('*', { count: 'exact', head: true });
+    const { count, error } = await this.applyFilters(query);
+    if (error) throw error;
+    return count ?? 0;
+  }
+
+  async sortBy(field: string): Promise<T[]> {
+    const rows = await this.toArray();
+    const key = toCamelCase(field);
+    return rows.sort((left, right) => {
+      const comparison = String((left as Record<string, unknown>)[key] ?? '').localeCompare(
+        String((right as Record<string, unknown>)[key] ?? '')
+      );
+      return this.ascending ? comparison : -comparison;
     });
   }
 }
 
-export const db = new EPSDatabase();
+class SupabaseTable<T> extends SupabaseCollection<T> {
+  async get(id: string): Promise<T | undefined> {
+    const { data, error } = await getSupabase().from(this.tableName).select('*').eq('id', id).maybeSingle();
+    if (error) throw error;
+    return data ? fromDatabase<T>(data, this.tableName) : undefined;
+  }
+
+  async add(value: T): Promise<string> {
+    const { data, error } = await getSupabase()
+      .from(this.tableName)
+      .insert(toDatabase(value, this.tableName) as Record<string, unknown>)
+      .select('id')
+      .single();
+    if (error) throw error;
+    return data.id as string;
+  }
+
+  async bulkAdd(values: T[]): Promise<string[]> {
+    if (!values.length) return [];
+    const { data, error } = await getSupabase()
+      .from(this.tableName)
+      .insert(values.map((value) => toDatabase(value, this.tableName) as Record<string, unknown>))
+      .select('id');
+    if (error) throw error;
+    return (data ?? []).map((row) => row.id as string);
+  }
+
+  async bulkPut(values: T[]): Promise<void> {
+    if (!values.length) return;
+    const onConflict = conflictColumns[this.tableName] ?? 'id';
+    const { error } = await getSupabase()
+      .from(this.tableName)
+      .upsert(values.map((value) => toDatabase(value, this.tableName) as Record<string, unknown>), { onConflict });
+    if (error) throw error;
+  }
+
+  async bulkDelete(ids: string[]): Promise<void> {
+    if (!ids.length) return;
+    const { error } = await getSupabase().from(this.tableName).delete().in('id', ids);
+    if (error) throw error;
+  }
+
+  async update(id: string, value: Partial<T>): Promise<void> {
+    const { error } = await getSupabase()
+      .from(this.tableName)
+      .update(toDatabase(value, this.tableName) as Record<string, unknown>)
+      .eq('id', id);
+    if (error) throw error;
+  }
+
+  async delete(id: string): Promise<void> {
+    const { error } = await getSupabase().from(this.tableName).delete().eq('id', id);
+    if (error) throw error;
+  }
+}
+
+function createSupabaseDatabase() {
+  return Object.fromEntries(
+    Object.entries(tableNames).map(([property, relation]) => [property, new SupabaseTable(relation)])
+  );
+}
+
+export const db = createSupabaseDatabase() as unknown as EPSDatabase;
+
+export async function seedSchoolSetup(): Promise<void> {
+  const now = new Date().toISOString();
+  const currentYear = new Date().getFullYear();
+  const academicYearId = `academic-year-${currentYear}`;
+
+  if ((await db.schoolSettings.count()) === 0) {
+    await db.schoolSettings.add({
+      id: 'school-1',
+      name: 'Emmanuel Preparatory School',
+      abbreviation: 'E.P.S.',
+      address: '',
+      digitalAddress: '',
+      phoneNumbers: [],
+      email: '',
+      establishmentDate: '',
+      proprietorName: '',
+      headteacherName: '',
+      motto: '',
+      currency: 'GHS',
+      timezone: 'Africa/Accra',
+      language: 'English',
+      createdAt: now,
+      updatedAt: now,
+    } as SchoolSettings);
+  }
+
+  let academicYear = await db.academicYears.get(academicYearId);
+  if (!academicYear) {
+    academicYear = {
+      id: academicYearId,
+      name: `${currentYear}/${currentYear + 1}`,
+      startDate: `${currentYear}-09-01`,
+      endDate: `${currentYear + 1}-07-31`,
+      isCurrent: true,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    };
+    await db.academicYears.add(academicYear);
+  }
+
+  if ((await db.terms.count()) === 0) {
+    await db.terms.bulkAdd([
+      { id: `term-${currentYear}-1`, academicYearId, name: 'First Term', startDate: `${currentYear}-09-01`, endDate: `${currentYear}-12-20`, isCurrent: true, status: 'active', createdAt: now, updatedAt: now },
+      { id: `term-${currentYear}-2`, academicYearId, name: 'Second Term', startDate: `${currentYear + 1}-01-10`, endDate: `${currentYear + 1}-04-05`, isCurrent: false, status: 'active', createdAt: now, updatedAt: now },
+      { id: `term-${currentYear}-3`, academicYearId, name: 'Third Term', startDate: `${currentYear + 1}-04-20`, endDate: `${currentYear + 1}-07-31`, isCurrent: false, status: 'active', createdAt: now, updatedAt: now },
+    ]);
+  }
+
+  if ((await db.classes.count()) === 0) {
+    await db.classes.bulkAdd(
+      PREDEFINED_CLASSES.map((schoolClass) => ({
+        id: `${academicYearId}-${schoolClass.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+        ...schoolClass,
+        academicYearId,
+        capacity: 40,
+        status: 'active' as const,
+        order: schoolClass.order,
+        createdAt: now,
+        updatedAt: now,
+      }))
+    );
+  }
+
+  if ((await db.subjects.count()) === 0) {
+    await db.subjects.bulkAdd(
+      DEFAULT_SUBJECTS.map((subject) => ({
+        id: `default-subject-${subject.code.toLowerCase()}`,
+        ...subject,
+        status: 'active' as const,
+        createdAt: now,
+        updatedAt: now,
+      }))
+    );
+  }
+
+  if ((await db.gradingScales.count()) === 0) {
+    await db.gradingScales.add({
+      id: 'default-grading-scale',
+      name: DEFAULT_GRADING_SCALE.name,
+      grades: DEFAULT_GRADING_SCALE.grades,
+      isDefault: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  if ((await db.feeCategories.count()) === 0) {
+    await db.feeCategories.bulkAdd(
+      DEFAULT_FEE_CATEGORIES.map((category, index) => ({
+        id: `default-fee-category-${index + 1}`,
+        ...category,
+        status: 'active' as const,
+        createdAt: now,
+        updatedAt: now,
+      }))
+    );
+  }
+
+  if ((await db.assessmentTypes.count()) === 0) {
+    await db.assessmentTypes.bulkAdd(
+      DEFAULT_ASSESSMENT_TYPES.map((type, index) => ({
+        id: `default-assessment-type-${index + 1}`,
+        ...type,
+        status: 'active' as const,
+        createdAt: now,
+        updatedAt: now,
+      }))
+    );
+  }
+}
+
+const privateStaffFields = [
+  'ssnitNumber',
+  'tin',
+  'ghanaCardNumber',
+  'nhisNumber',
+  'bankName',
+  'bankAccountName',
+  'bankAccountNumber',
+  'bankBranch',
+] as const;
+
+function splitStaffData(value: Partial<Staff>): {
+  publicData: Record<string, unknown>;
+  privateData: Record<string, unknown>;
+} {
+  const publicData = { ...value } as Record<string, unknown>;
+  const privateData: Record<string, unknown> = {};
+  for (const field of privateStaffFields) {
+    if (field in publicData) {
+      privateData[field] = publicData[field];
+      delete publicData[field];
+    }
+  }
+  return { publicData, privateData };
+}
+
+async function saveStaffPrivateDetails(staffId: string, details: Record<string, unknown>): Promise<void> {
+  if (!Object.values(details).some((value) => value !== undefined)) return;
+  const { error } = await getSupabase()
+    .from('staff_private_details')
+    .upsert(
+      { staff_id: staffId, ...toDatabase(details, 'staff_private_details') as Record<string, unknown> },
+      { onConflict: 'staff_id' }
+    );
+  if (error) throw error;
+}
 
 // ============================================
 // DATABASE SEEDING
@@ -499,6 +840,27 @@ export const dataService = {
     const existing = await db.schoolSettings.toCollection().first();
     if (existing) {
       await db.schoolSettings.update(existing.id, { ...settings, updatedAt: new Date().toISOString() });
+    } else {
+      const now = new Date().toISOString();
+      await db.schoolSettings.add({
+        id: 'school-1',
+        name: settings.name ?? 'Emmanuel Preparatory School',
+        abbreviation: settings.abbreviation ?? 'E.P.S.',
+        address: settings.address ?? '',
+        digitalAddress: settings.digitalAddress ?? '',
+        phoneNumbers: settings.phoneNumbers ?? [],
+        email: settings.email ?? '',
+        establishmentDate: settings.establishmentDate ?? '',
+        proprietorName: settings.proprietorName ?? '',
+        headteacherName: settings.headteacherName ?? '',
+        motto: settings.motto ?? '',
+        currency: 'GHS',
+        timezone: 'Africa/Accra',
+        language: 'English',
+        ...settings,
+        createdAt: now,
+        updatedAt: now,
+      } as SchoolSettings);
     }
   },
 
@@ -508,11 +870,8 @@ export const dataService = {
   },
 
   async getCurrentAcademicYear(): Promise<AcademicYear | undefined> {
-    return db.academicYears.where('isCurrent').equals(1 as unknown as string).first()
-      .then(async (result) => {
-        if (result) return result;
-        return db.academicYears.toCollection().first();
-      });
+    const years = await db.academicYears.toArray();
+    return years.find((year) => year.isCurrent) ?? years[0];
   },
 
   async addAcademicYear(year: Omit<AcademicYear, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
@@ -689,7 +1048,17 @@ export const dataService = {
   },
 
   async getStaffMember(id: string): Promise<Staff | undefined> {
-    return db.staff.get(id);
+    const staff = await db.staff.get(id);
+    if (!staff) return undefined;
+
+    const { data, error } = await getSupabase()
+      .from('staff_private_details')
+      .select('*')
+      .eq('staff_id', id)
+      .maybeSingle();
+    if (error) throw error;
+
+    return data ? { ...staff, ...fromDatabase<Partial<Staff>>(data, 'staff_private_details') } : staff;
   },
 
   async getQualifications(staffId: string): Promise<Qualification[]> {
@@ -699,12 +1068,16 @@ export const dataService = {
   async addStaff(staff: Omit<Staff, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     const id = generateId();
     const now = new Date().toISOString();
-    await db.staff.add({ ...staff, id, createdAt: now, updatedAt: now });
+    const { publicData, privateData } = splitStaffData(staff);
+    await db.staff.add({ ...publicData, id, createdAt: now, updatedAt: now } as unknown as Staff);
+    await saveStaffPrivateDetails(id, privateData);
     return id;
   },
 
   async updateStaff(id: string, data: Partial<Staff>): Promise<void> {
-    await db.staff.update(id, { ...data, updatedAt: new Date().toISOString() });
+    const { publicData, privateData } = splitStaffData(data);
+    await db.staff.update(id, { ...publicData, updatedAt: new Date().toISOString() } as Partial<Staff>);
+    await saveStaffPrivateDetails(id, privateData);
   },
 
   async getStaffCount(): Promise<{ teaching: number; nonTeaching: number }> {
@@ -885,45 +1258,40 @@ export const dataService = {
     assessmentId: string,
     scores: Array<{ studentId: string; score: number | null }>
   ): Promise<void> {
-    await db.transaction('rw', db.assessments, db.assessmentScores, async () => {
-      const assessment = await db.assessments.get(assessmentId);
-      if (!assessment) throw new Error('Assessment not found.');
+    const assessment = await db.assessments.get(assessmentId);
+    if (!assessment) throw new Error('Assessment not found.');
 
-      const existingScores = await db.assessmentScores
-        .where('assessmentId')
-        .equals(assessmentId)
-        .toArray();
-      const existingByStudent = new Map(existingScores.map((score) => [score.studentId, score]));
-      const now = new Date().toISOString();
-      const scoresToSave: AssessmentScore[] = [];
-      const scoreIdsToDelete: string[] = [];
+    const existingScores = await db.assessmentScores.where('assessmentId').equals(assessmentId).toArray();
+    const existingByStudent = new Map(existingScores.map((score) => [score.studentId, score]));
+    const now = new Date().toISOString();
+    const scoresToSave: AssessmentScore[] = [];
+    const scoreIdsToDelete: string[] = [];
 
-      for (const entry of scores) {
-        const existing = existingByStudent.get(entry.studentId);
-        if (entry.score === null) {
-          if (existing) scoreIdsToDelete.push(existing.id);
-          continue;
-        }
-
-        scoresToSave.push({
-          id: existing?.id ?? generateId(),
-          assessmentId,
-          studentId: entry.studentId,
-          score: entry.score,
-          status: 'submitted',
-          createdAt: existing?.createdAt ?? now,
-          updatedAt: now,
-        });
+    for (const entry of scores) {
+      const existing = existingByStudent.get(entry.studentId);
+      if (entry.score === null) {
+        if (existing) scoreIdsToDelete.push(existing.id);
+        continue;
       }
 
-      if (scoresToSave.length) await db.assessmentScores.bulkPut(scoresToSave);
-      if (scoreIdsToDelete.length) await db.assessmentScores.bulkDelete(scoreIdsToDelete);
-
-      const isComplete = scores.length > 0 && scores.every((entry) => entry.score !== null);
-      await db.assessments.update(assessmentId, {
-        status: isComplete ? 'graded' : 'open',
+      scoresToSave.push({
+        id: existing?.id ?? generateId(),
+        assessmentId,
+        studentId: entry.studentId,
+        score: entry.score,
+        status: 'submitted',
+        createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       });
+    }
+
+    if (scoresToSave.length) await db.assessmentScores.bulkPut(scoresToSave);
+    if (scoreIdsToDelete.length) await db.assessmentScores.bulkDelete(scoreIdsToDelete);
+
+    const isComplete = scores.length > 0 && scores.every((entry) => entry.score !== null);
+    await db.assessments.update(assessmentId, {
+      status: isComplete ? 'graded' : 'open',
+      updatedAt: now,
     });
   },
 

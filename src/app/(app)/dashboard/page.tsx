@@ -34,7 +34,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/contexts/ToastContext';
-import { dataService, seedDatabase } from '@/lib/db';
+import { dataService, seedSchoolSetup } from '@/lib/db';
 import { formatCurrency, formatCurrencyCompact, getRelativeTime } from '@/lib/utils';
 import { ActivityLog } from '@/types';
 import Link from 'next/link';
@@ -65,7 +65,7 @@ export default function DashboardPage() {
   useEffect(() => {
     async function load() {
       try {
-        await seedDatabase();
+        await seedSchoolSetup();
         const [dashboardStats, enrollment, logs] = await Promise.all([
           dataService.getDashboardStats(),
           dataService.getEnrollmentByClass(),
