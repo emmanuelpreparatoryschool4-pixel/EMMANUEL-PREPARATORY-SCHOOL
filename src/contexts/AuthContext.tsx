@@ -1,18 +1,43 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import { User, UserRole, AuthState } from '@/types';
-import { DEMO_ACCOUNTS } from '@/lib/constants';
+import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  loginAsDemo: (role: UserRole) => Promise<void>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const AUTH_STORAGE_KEY = 'eps_auth_user';
+function isUserRole(role: string): role is UserRole {
+  return role === 'owner' || role === 'headmaster';
+}
+
+async function getProfileUser(userId: string): Promise<User | null> {
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, role, avatar_url, staff_id, created_at, updated_at')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error || !data || !isUserRole(data.role)) return null;
+
+  return {
+    id: data.id,
+    email: data.email,
+    name: data.full_name,
+    role: data.role,
+    avatar: data.avatar_url ?? undefined,
+    staffId: data.staff_id ?? undefined,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({
@@ -22,72 +47,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
-    const stored = localStorage.getItem(AUTH_STORAGE_KEY);
-    if (stored) {
-      try {
-        const user = JSON.parse(stored) as User;
-        if (user.role !== 'owner' && user.role !== 'headmaster') {
-          throw new Error('Stored account role is no longer supported.');
-        }
-        setState({ user, isAuthenticated: true, isLoading: false });
-      } catch {
-        localStorage.removeItem(AUTH_STORAGE_KEY);
-        setState({ user: null, isAuthenticated: false, isLoading: false });
-      }
-    } else {
-      setState((prev) => ({ ...prev, isLoading: false }));
+    let active = true;
+
+    if (!supabase) {
+      setState({ user: null, isAuthenticated: false, isLoading: false });
+      return;
     }
+
+    const applySession = async (session: Session | null) => {
+      if (!session) {
+        if (active) setState({ user: null, isAuthenticated: false, isLoading: false });
+        return;
+      }
+
+      const user = await getProfileUser(session.user.id);
+      if (active) {
+        setState({ user, isAuthenticated: Boolean(user), isLoading: false });
+      }
+    };
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      queueMicrotask(() => void applySession(session));
+    });
+    void supabase.auth.getSession().then(({ data }) => applySession(data.session));
+
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    // MOCK AUTHENTICATION - Replace with real backend later
-    // This is for frontend demonstration only
-    const demoAccount = DEMO_ACCOUNTS.find(
-      (acc) => acc.email.toLowerCase() === email.toLowerCase() && acc.password === password
-    );
-
-    if (!demoAccount) {
-      return { success: false, error: 'Invalid email or password. Use demo credentials.' };
+    if (!supabase) {
+      return { success: false, error: 'Supabase is not configured for this deployment.' };
     }
 
-    const user: User = {
-      id: `demo-${demoAccount.role}`,
-      email: demoAccount.email,
-      name: demoAccount.name,
-      role: demoAccount.role,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error || !data.session) {
+      return { success: false, error: error?.message ?? 'Sign-in failed.' };
+    }
 
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+    const user = await getProfileUser(data.session.user.id);
+    if (!user) {
+      await supabase.auth.signOut();
+      return {
+        success: false,
+        error: 'Your account has no valid owner or headmaster profile. Contact the school owner.',
+      };
+    }
+
     setState({ user, isAuthenticated: true, isLoading: false });
     return { success: true };
   }, []);
 
-  const loginAsDemo = useCallback(async (role: UserRole) => {
-    const demoAccount = DEMO_ACCOUNTS.find((acc) => acc.role === role);
-    if (!demoAccount) return;
-
-    const user: User = {
-      id: `demo-${role}`,
-      email: demoAccount.email,
-      name: demoAccount.name,
-      role,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
-    setState({ user, isAuthenticated: true, isLoading: false });
-  }, []);
-
   const logout = useCallback(() => {
-    localStorage.removeItem(AUTH_STORAGE_KEY);
+    void supabase?.auth.signOut();
     setState({ user: null, isAuthenticated: false, isLoading: false });
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, loginAsDemo, logout }}>
+    <AuthContext.Provider value={{ ...state, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -4,21 +4,19 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Eye, EyeOff, GraduationCap, Shield, Users } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { loginSchema, type LoginFormData } from '@/lib/validations';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { DEMO_ACCOUNTS } from '@/lib/constants';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, loginAsDemo, isAuthenticated } = useAuth();
+  const { login, isAuthenticated } = useAuth();
   const { addToast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [showForgot, setShowForgot] = useState(false);
   const schoolPhoto = "url('https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=2000&q=85')";
 
   React.useEffect(() => {
@@ -47,18 +45,6 @@ export default function LoginPage() {
     } else {
       addToast({ type: 'error', title: 'Login failed', message: result.error });
     }
-  };
-
-  const handleDemoLogin = async (role: 'owner' | 'headmaster') => {
-    setIsLoading(true);
-    await loginAsDemo(role);
-    setIsLoading(false);
-    addToast({
-      type: 'info',
-      title: 'Demo Mode',
-      message: `Signed in as ${role === 'owner' ? 'School Owner' : 'Headmaster'} (demo)`,
-    });
-    router.push('/dashboard');
   };
 
   return (
@@ -119,8 +105,7 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {!showForgot ? (
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
               <Input
                 label="Email or Username"
                 type="email"
@@ -159,78 +144,13 @@ export default function LoginPage() {
                   />
                   Remember me
                 </label>
-                <button
-                  type="button"
-                  onClick={() => setShowForgot(true)}
-                  className="text-sm font-medium text-primary-600 hover:text-primary-700"
-                >
-                  Forgot password?
-                </button>
+                <span className="text-xs text-gray-400">Contact the school owner to reset your password.</span>
               </div>
 
               <Button type="submit" className="w-full" size="lg" isLoading={isLoading}>
                 Sign In
               </Button>
-            </form>
-          ) : (
-            <div className="space-y-5">
-              <Input
-                label="Email Address"
-                type="email"
-                placeholder="you@eps.edu.gh"
-                hint="A password reset link would be sent to this email (backend integration required)"
-              />
-              <div className="flex gap-3">
-                <Button variant="outline" className="flex-1" onClick={() => setShowForgot(false)}>
-                  Back to Login
-                </Button>
-                <Button
-                  className="flex-1"
-                  onClick={() => {
-                    addToast({
-                      type: 'info',
-                      title: 'Demo Mode',
-                      message: 'Password reset requires backend integration.',
-                    });
-                    setShowForgot(false);
-                  }}
-                >
-                  Send Reset Link
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Demo accounts */}
-          <div className="mt-8 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
-              Demo Access (Frontend Only)
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleDemoLogin('owner')}
-                disabled={isLoading}
-                leftIcon={<Shield className="h-4 w-4" />}
-              >
-                Owner Demo
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleDemoLogin('headmaster')}
-                disabled={isLoading}
-                leftIcon={<GraduationCap className="h-4 w-4" />}
-              >
-                Headmaster Demo
-              </Button>
-            </div>
-            <p className="mt-3 text-[11px] leading-relaxed text-gray-400">
-              This is a mock authentication adapter for frontend demonstration only. Replace with
-              real backend authentication in production.
-            </p>
-          </div>
+          </form>
 
           <p className="mt-6 text-center text-xs text-gray-400">
             Secured access. Unauthorized use is prohibited.

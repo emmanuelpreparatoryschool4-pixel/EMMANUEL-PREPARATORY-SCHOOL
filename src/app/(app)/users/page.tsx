@@ -8,14 +8,53 @@ import { Badge } from '@/components/ui/Badge';
 import { Table } from '@/components/ui/Table';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
-import { dataService } from '@/lib/db';
+import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { User, TableColumn } from '@/types';
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
-    dataService.getUsers().then(setUsers);
+    let active = true;
+
+    async function loadUsers() {
+      if (!supabase || !isSupabaseConfigured) {
+        setLoadError('Supabase is not configured for this deployment.');
+        setIsLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, role, created_at, updated_at')
+        .order('created_at');
+
+      if (!active) return;
+      if (error) {
+        setLoadError('Unable to load school accounts.');
+      } else {
+        setUsers(
+          (data ?? [])
+            .filter((profile) => profile.role === 'owner' || profile.role === 'headmaster')
+            .map((profile) => ({
+              id: profile.id,
+              email: profile.email,
+              name: profile.full_name,
+              role: profile.role,
+              createdAt: profile.created_at,
+              updatedAt: profile.updated_at,
+            }))
+        );
+      }
+      setIsLoading(false);
+    }
+
+    void loadUsers();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const columns: TableColumn<User>[] = [
@@ -40,7 +79,8 @@ export default function UsersPage() {
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <strong>Demo Mode:</strong> Create the owner and headmaster accounts in Supabase Auth after connecting the backend.
         </div>
-        <Table columns={columns} data={users} keyExtractor={(u) => u.id} />
+        {loadError && <p role="alert" className="mb-4 text-sm text-red-700">{loadError}</p>}
+        <Table columns={columns} data={users} keyExtractor={(u) => u.id} isLoading={isLoading} />
       </Card>
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">

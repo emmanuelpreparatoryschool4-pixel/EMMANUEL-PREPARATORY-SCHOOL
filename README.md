@@ -25,7 +25,11 @@ set role = 'owner'
 where email = 'owner@your-school-domain.com';
 ```
 
-The app is not connected to Supabase yet: sign-in is currently demo authentication and records are stored in browser IndexedDB. Do not enter real school data until Supabase Auth and the app's data layer have been connected. The SQL uses snake_case columns, so the integration must map those names to the app's TypeScript model fields.
+The app uses Supabase Auth for sign-in and loads account profiles from Supabase. Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to Vercel (the URL and public anon/publishable key are browser-visible by design). Use [.env.example](.env.example) as a local template. Never add the service-role key to a `NEXT_PUBLIC_` variable.
+
+Create the owner account in Supabase Auth, then promote its profile with the SQL above. Disable public sign-ups once the owner account exists. Headmaster account creation can be done later by the owner.
+
+School records are still stored in browser IndexedDB; only authentication and account profiles use Supabase at this stage. Do not enter real school data until the rest of the data layer has been migrated and tested. The SQL uses snake_case columns, so that integration must map those names to the app's TypeScript model fields.
 
 ## Quick Start
 
