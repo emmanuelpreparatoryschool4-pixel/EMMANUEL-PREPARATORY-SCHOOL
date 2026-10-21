@@ -27,6 +27,8 @@ where email = 'owner@your-school-domain.com';
 
 The app uses Supabase Auth for sign-in and loads account profiles from Supabase. Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to Vercel (the URL and public anon/publishable key are browser-visible by design). Use [.env.example](.env.example) as a local template. Never add the service-role key to a `NEXT_PUBLIC_` variable.
 
+For password recovery, add `https://YOUR-VERCEL-DOMAIN/profile?password-recovery=1` to Supabase **Authentication > URL Configuration > Redirect URLs**. Add your local URL there too when testing locally.
+
 Create the owner account in Supabase Auth, then promote its profile with the SQL above. Disable public sign-ups. Headmaster account creation is a later step.
 
 The app reads and writes school records through Supabase. A new database starts with basic school setup/reference rows; add students, staff, classes, and finance data after signing in as the owner. The data adapter maps the SQL snake_case columns to the app's TypeScript model fields. Existing IndexedDB records are not migrated automatically.
