@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { Save, Cloud, CloudOff, CheckCircle, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -15,6 +15,23 @@ import { Class, Student, AttendanceRecord, AttendanceStatus, SyncStatus } from '
 import { ATTENDANCE_STATUSES } from '@/lib/constants';
 import { formatDate } from '@/lib/utils';
 
+function subscribeToConnection(callback: () => void) {
+  window.addEventListener('online', callback);
+  window.addEventListener('offline', callback);
+  return () => {
+    window.removeEventListener('online', callback);
+    window.removeEventListener('offline', callback);
+  };
+}
+
+function getConnectionStatus() {
+  return navigator.onLine;
+}
+
+function getServerConnectionStatus() {
+  return true;
+}
+
 export default function AttendancePage() {
   const { addToast } = useToast();
   const { user } = useAuth();
@@ -24,20 +41,12 @@ export default function AttendancePage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [records, setRecords] = useState<Record<string, { status: AttendanceStatus; remarks: string }>>({});
   const [isSaving, setIsSaving] = useState(false);
-  const [isOnline, setIsOnline] = useState(true);
+  const isOnline = useSyncExternalStore(
+    subscribeToConnection,
+    getConnectionStatus,
+    getServerConnectionStatus
+  );
   const [existingRecords, setExistingRecords] = useState<AttendanceRecord[]>([]);
-
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    setIsOnline(navigator.onLine);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
 
   useEffect(() => {
     async function load() {

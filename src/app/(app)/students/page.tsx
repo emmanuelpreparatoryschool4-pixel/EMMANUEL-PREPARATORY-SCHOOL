@@ -36,7 +36,6 @@ export default function StudentsPage() {
   const [archiveTarget, setArchiveTarget] = useState<Student | null>(null);
 
   const loadData = useCallback(async () => {
-    setIsLoading(true);
     try {
       const [studentsData, classesData] = await Promise.all([
         dataService.getStudents(),
@@ -52,7 +51,7 @@ export default function StudentsPage() {
   }, [addToast]);
 
   useEffect(() => {
-    void loadData();
+    queueMicrotask(() => void loadData());
   }, [loadData]);
 
   const filtered = useMemo(() => {
@@ -76,11 +75,8 @@ export default function StudentsPage() {
   }, [students, search, classFilter, genderFilter, statusFilter]);
 
   const totalPages = Math.ceil(filtered.length / pageSize);
-  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, classFilter, genderFilter, statusFilter, pageSize]);
+  const currentPage = Math.min(page, totalPages || 1);
+  const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const classMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -94,7 +90,8 @@ export default function StudentsPage() {
       await dataService.updateStudent(archiveTarget.id, { enrollmentStatus: 'archived' });
       addToast({ type: 'success', title: 'Archived', message: 'Student archived successfully.' });
       setArchiveTarget(null);
-      loadData();
+      setIsLoading(true);
+      await loadData();
     } catch {
       addToast({ type: 'error', title: 'Error', message: 'Failed to archive student.' });
     }
@@ -201,24 +198,36 @@ export default function StudentsPage() {
         <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <SearchInput
             value={search}
-            onChange={setSearch}
+            onChange={(value) => {
+              setSearch(value);
+              setPage(1);
+            }}
             placeholder="Search by name or ID..."
             className="lg:col-span-2"
           />
           <Select
             options={[{ value: '', label: 'All Classes' }, ...classes.map((c) => ({ value: c.id, label: c.name }))]}
             value={classFilter}
-            onChange={(e) => setClassFilter(e.target.value)}
+            onChange={(e) => {
+              setClassFilter(e.target.value);
+              setPage(1);
+            }}
           />
           <Select
             options={[{ value: '', label: 'All Genders' }, ...GENDERS]}
             value={genderFilter}
-            onChange={(e) => setGenderFilter(e.target.value)}
+            onChange={(e) => {
+              setGenderFilter(e.target.value);
+              setPage(1);
+            }}
           />
           <Select
             options={[{ value: '', label: 'All Statuses' }, ...ENROLLMENT_STATUSES]}
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
           />
         </div>
 
@@ -269,7 +278,7 @@ export default function StudentsPage() {
             />
             <div className="mt-4">
               <Pagination
-                currentPage={page}
+                currentPage={currentPage}
                 totalPages={totalPages}
                 totalItems={filtered.length}
                 pageSize={pageSize}

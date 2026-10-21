@@ -43,16 +43,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({
     user: null,
     isAuthenticated: false,
-    isLoading: true,
+    isLoading: isSupabaseConfigured,
   });
 
   useEffect(() => {
     let active = true;
 
-    if (!supabase) {
-      setState({ user: null, isAuthenticated: false, isLoading: false });
-      return;
-    }
+    if (!supabase) return;
 
     const applySession = async (session: Session | null) => {
       if (!session) {

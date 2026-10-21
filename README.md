@@ -4,7 +4,7 @@ School management application for Emmanuel Preparatory School, a basic school in
 
 ## Tech Stack
 
-- **Next.js 14** (App Router)
+- **Next.js 16** (App Router)
 - **TypeScript** (strict mode)
 - **Tailwind CSS**
 - **React Hook Form** + **Zod** for forms and validation
@@ -27,9 +27,9 @@ where email = 'owner@your-school-domain.com';
 
 The app uses Supabase Auth for sign-in and loads account profiles from Supabase. Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to Vercel (the URL and public anon/publishable key are browser-visible by design). Use [.env.example](.env.example) as a local template. Never add the service-role key to a `NEXT_PUBLIC_` variable.
 
-Create the owner account in Supabase Auth, then promote its profile with the SQL above. Disable public sign-ups; headmaster accounts should be added by invitation after owner account management is implemented.
+Create the owner account in Supabase Auth, then promote its profile with the SQL above. Disable public sign-ups. Headmaster account creation is a later step.
 
-The app reads and writes school records through Supabase. A new database starts with basic school setup/reference rows; add students, staff, classes, and finance data after signing in as the owner. The data adapter maps the SQL snake_case columns to the app's TypeScript model fields.
+The app reads and writes school records through Supabase. A new database starts with basic school setup/reference rows; add students, staff, classes, and finance data after signing in as the owner. The data adapter maps the SQL snake_case columns to the app's TypeScript model fields. Existing IndexedDB records are not migrated automatically.
 
 ## Quick Start
 

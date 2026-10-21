@@ -8,9 +8,6 @@ const withPWA = require('@ducanh2912/next-pwa').default({
 
 const nextConfig = {
   reactStrictMode: true,
-  images: {
-    domains: ['localhost'],
-  },
 };
 
 module.exports = withPWA(nextConfig);
