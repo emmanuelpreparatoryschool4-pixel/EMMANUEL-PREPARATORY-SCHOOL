@@ -6,26 +6,31 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function getErrorMessage(error: unknown, fallback: string): string {
+  const details = error && typeof error === 'object'
+    ? error as { message?: unknown; code?: unknown; details?: unknown; hint?: unknown }
+    : undefined;
+  const message = error instanceof Error
+    ? error.message
+    : typeof details?.message === 'string'
+      ? details.message
+      : undefined;
+
   if (error instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(error.message)) {
-    return 'Could not connect to Supabase. Check your internet connection, Supabase project status, and NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY settings. For local development, set them in .env.local and restart the dev server.';
+    return 'Could not connect to Supabase. Check your internet connection, Supabase project status, and the deployed NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY values.';
   }
 
-  if (error instanceof Error) {
-    const databaseError = error as Error & { code?: string; details?: string; hint?: string };
-    const code = databaseError.code;
-    if (code === '42501') {
-      return `Supabase denied this operation. Check your account role and row-level security policies. ${databaseError.message}`;
-    }
-    if (code === '42P01' || code === 'PGRST204' || code === 'PGRST205') {
-      return `The Supabase database schema may be out of date. Apply the required schema migration. ${databaseError.message}`;
-    }
+  if (!message) return fallback;
 
-    return [databaseError.message, databaseError.details, databaseError.hint]
-      .filter(Boolean)
-      .join(' ');
+  if (details?.code === '42501') {
+    return `Supabase denied this operation. Check the signed-in account role and row-level security policies. ${message}`;
+  }
+  if (['42P01', 'PGRST204', 'PGRST205'].includes(String(details?.code))) {
+    return `The Supabase database schema may be out of date. Apply the required schema migration. ${message}`;
   }
 
-  return fallback;
+  return [message, details?.details, details?.hint]
+    .filter((part): part is string => typeof part === 'string' && part.length > 0)
+    .join(' ');
 }
 
 export function formatCurrency(amountInPesewas: number): string {

@@ -82,13 +82,13 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
       <aside
         className={cn(
           'fixed inset-y-0 left-0 z-50 flex flex-col bg-gray-900 transition-all duration-300 lg:static',
-          collapsed ? 'w-[72px]' : 'w-64',
+          collapsed ? 'lg:w-[72px]' : 'w-64',
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
         {/* Logo */}
         <div className="flex h-16 items-center justify-between border-b border-gray-800 px-4">
-          {!collapsed && (
+          {(!collapsed || isOpen) && (
             <Link href="/dashboard" className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-600 text-sm font-bold text-white">
                 EPS
@@ -99,14 +99,15 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
               </div>
             </Link>
           )}
-          {collapsed && (
+          {collapsed && !isOpen && (
             <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-primary-600 text-xs font-bold text-white">
               EPS
             </div>
           )}
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-gray-400 hover:bg-gray-800 lg:hidden"
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-800 lg:hidden"
+            aria-label="Close navigation menu"
           >
             <X className="h-5 w-5" />
           </button>
@@ -125,16 +126,16 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
                     href={item.href}
                     onClick={onClose}
                     className={cn(
-                      'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                      'flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
                       isActive
                         ? 'bg-primary-600 text-white'
                         : 'text-gray-400 hover:bg-gray-800 hover:text-white',
-                      collapsed && 'justify-center px-2'
+                      collapsed && !isOpen && 'justify-center px-2'
                     )}
-                    title={collapsed ? item.label : undefined}
+                    title={collapsed && !isOpen ? item.label : undefined}
                   >
                     <Icon className="h-5 w-5 flex-shrink-0" />
-                    {!collapsed && <span>{item.label}</span>}
+                    {(!collapsed || isOpen) && <span>{item.label}</span>}
                   </Link>
                 </li>
               );
@@ -148,23 +149,24 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
             <button
               onClick={() => void handleInstall()}
               className={cn(
-                'mb-2 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-300',
+                'mb-2 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-300',
                 'hover:bg-gray-800 hover:text-white',
-                collapsed && 'justify-center px-2'
+                collapsed && !isOpen && 'justify-center px-2'
               )}
-              title={collapsed ? 'Install app' : undefined}
+              title={collapsed && !isOpen ? 'Install app' : undefined}
             >
               <Download className="h-5 w-5 flex-shrink-0" />
-              {!collapsed && <span>Install App</span>}
+              {(!collapsed || isOpen) && <span>Install App</span>}
             </button>
           )}
           <button
             onClick={onToggleCollapse}
             className={cn(
-              'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-400',
+              'hidden min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-400 lg:flex',
               'hover:bg-gray-800 hover:text-white',
               collapsed && 'justify-center px-2'
             )}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             <ChevronLeft
               className={cn('h-5 w-5 transition-transform', collapsed && 'rotate-180')}

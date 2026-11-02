@@ -984,6 +984,17 @@ export const dataService = {
     return id;
   },
 
+  async deleteStudent(id: string): Promise<void> {
+    const { data, error } = await getSupabase()
+      .from('students')
+      .delete()
+      .eq('id', id)
+      .select('id')
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new Error('Supabase did not confirm removal of the incomplete student record.');
+  },
+
   async updateStudent(id: string, data: Partial<Student>): Promise<void> {
     await db.students.update(id, { ...data, updatedAt: new Date().toISOString() });
   },
@@ -1010,6 +1021,14 @@ export const dataService = {
     const now = new Date().toISOString();
     await db.guardians.add({ ...guardian, id, createdAt: now, updatedAt: now });
     return id;
+  },
+
+  async addGuardians(guardians: Array<Omit<Guardian, 'id' | 'createdAt' | 'updatedAt'>>): Promise<string[]> {
+    if (!guardians.length) return [];
+    const now = new Date().toISOString();
+    return db.guardians.bulkAdd(
+      guardians.map((guardian) => ({ ...guardian, id: generateId(), createdAt: now, updatedAt: now }))
+    );
   },
 
   async updateGuardian(id: string, data: Partial<Guardian>): Promise<void> {

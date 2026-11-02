@@ -25,6 +25,8 @@ export default function NewStudentPage() {
   const [classes, setClasses] = useState<Class[]>([]);
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   const {
     register,
@@ -59,22 +61,30 @@ export default function NewStudentPage() {
 
   useEffect(() => {
     async function load() {
-      const [cls, years] = await Promise.all([
-        dataService.getClasses(),
-        dataService.getAcademicYears(),
-      ]);
-      setClasses(cls);
-      setAcademicYears(years);
-      const current = years.find((y) => y.isCurrent) || years[0];
-      if (current) setValue('academicYearId', current.id);
-      if (cls[0]) setValue('currentClassId', cls[0].id);
+      try {
+        const [cls, years] = await Promise.all([
+          dataService.getClasses(),
+          dataService.getAcademicYears(),
+        ]);
+        setClasses(cls);
+        setAcademicYears(years);
+        const current = years.find((y) => y.isCurrent) || years[0];
+        if (current) setValue('academicYearId', current.id);
+        if (cls[0]) setValue('currentClassId', cls[0].id);
+      } catch (error) {
+        setLoadError(getErrorMessage(error, 'Could not load classes and academic years.'));
+      }
     }
-    load();
+    void load();
   }, [setValue]);
 
   const onSubmit = async (data: StudentFormValues) => {
-    if (!user) return;
+    if (!user) {
+      setSubmitError('Your sign-in session has expired. Sign out and sign in again before saving.');
+      return;
+    }
     setIsSubmitting(true);
+    setSubmitError('');
     try {
       const { guardians, ...studentData } = data;
       const studentId = await dataService.addStudent({
@@ -83,27 +93,61 @@ export default function NewStudentPage() {
         ...studentData,
       });
 
-      for (const guardian of guardians) {
-        await dataService.addGuardian({
-          ...guardian,
-          studentId,
-        });
+      try {
+        const savedGuardianIds = await dataService.addGuardians(
+          guardians.map((guardian) => ({ ...guardian, studentId }))
+        );
+        const [savedStudent, savedGuardians] = await Promise.all([
+          dataService.getStudent(studentId),
+          dataService.getGuardians(studentId),
+        ]);
+        if (!savedStudent || savedGuardianIds.length !== guardians.length || savedGuardians.length !== guardians.length) {
+          throw new Error('Supabase did not confirm that the student and all guardian records were saved.');
+        }
+      } catch (saveError) {
+        try {
+          await dataService.deleteStudent(studentId);
+        } catch (rollbackError) {
+          throw new Error(
+            `${getErrorMessage(saveError, 'Saving the student or guardian records failed.')} The student record may still exist because cleanup also failed: ${getErrorMessage(rollbackError, 'Unknown cleanup error.')}`
+          );
+        }
+        throw new Error(
+          `${getErrorMessage(saveError, 'Saving the student or guardian records failed.')} The incomplete student record was removed.`
+        );
       }
 
-      await dataService.addActivityLog({
-        userId: user.id,
-        userName: user.name,
-        action: 'Enrolled new student',
-        entityType: 'student',
-        entityId: studentId,
-        details: `${data.firstName} ${data.lastName}`,
-        timestamp: new Date().toISOString(),
-      });
+      try {
+        await dataService.addActivityLog({
+          userId: user.id,
+          userName: user.name,
+          action: 'Enrolled new student',
+          entityType: 'student',
+          entityId: studentId,
+          details: `${data.firstName} ${data.lastName}`,
+          timestamp: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error('Student was saved but the activity log could not be written.', error);
+        addToast({
+          type: 'warning',
+          title: 'Student saved; activity log unavailable',
+          message: getErrorMessage(error, 'The student and guardian records were saved, but the activity log was not.'),
+          duration: 12000,
+        });
+      }
 
       addToast({ type: 'success', title: 'Student added', message: 'Student enrolled successfully.' });
       router.push('/students');
     } catch (error) {
-      addToast({ type: 'error', title: 'Could not add student', message: getErrorMessage(error, 'Failed to add student.') });
+      const message = getErrorMessage(error, 'Failed to add student.');
+      setSubmitError(message);
+      addToast({
+        type: 'error',
+        title: 'Student was not saved',
+        message,
+        duration: 15000,
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -126,6 +170,12 @@ export default function NewStudentPage() {
       />
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        {(loadError || submitError) && (
+          <div role="alert" className="break-words rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <p className="font-semibold">{submitError ? 'Student was not saved' : 'Could not load enrollment options'}</p>
+            <p className="mt-1">{submitError || loadError}</p>
+          </div>
+        )}
         {/* Personal Information */}
         <Card>
           <CardHeader><CardTitle>Personal Information</CardTitle></CardHeader>
@@ -271,11 +321,11 @@ export default function NewStudentPage() {
           </CardContent>
         </Card>
 
-        <div className="flex justify-end gap-3">
-          <Button type="button" variant="outline" onClick={() => router.back()}>
+        <div className="sticky bottom-0 -mx-3 flex flex-col-reverse gap-2 border-t border-gray-200 bg-gray-50/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:static sm:mx-0 sm:flex-row sm:justify-end sm:border-0 sm:bg-transparent sm:p-0 sm:pb-0 sm:backdrop-blur-none">
+          <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => router.back()}>
             Cancel
           </Button>
-          <Button type="submit" isLoading={isSubmitting} leftIcon={<Save className="h-4 w-4" />}>
+          <Button type="submit" isLoading={isSubmitting} className="w-full sm:w-auto" leftIcon={<Save className="h-4 w-4" />}>
             Save Student
           </Button>
         </div>

@@ -32,25 +32,26 @@ export function ToastContainer() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
+    <div className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-[100] flex flex-col gap-2 sm:inset-x-auto sm:bottom-4 sm:right-4">
       {toasts.map((toast) => {
         const Icon = iconMap[toast.type];
         return (
           <div
             key={toast.id}
             className={cn(
-              'flex w-80 items-start gap-3 rounded-lg border p-4 shadow-lg',
+              'flex w-full max-w-full items-start gap-3 overflow-hidden rounded-lg border p-4 shadow-lg sm:w-80',
               styleMap[toast.type]
             )}
           >
             <Icon className={cn('h-5 w-5 flex-shrink-0', iconStyleMap[toast.type])} />
-            <div className="flex-1">
+            <div className="min-w-0 flex-1 break-words">
               <p className="text-sm font-medium">{toast.title}</p>
               {toast.message && <p className="mt-0.5 text-sm opacity-90">{toast.message}</p>}
             </div>
             <button
               onClick={() => removeToast(toast.id)}
-              className="flex-shrink-0 opacity-60 hover:opacity-100"
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center opacity-60 hover:opacity-100"
+              aria-label="Dismiss notification"
             >
               <X className="h-4 w-4" />
             </button>
