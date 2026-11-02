@@ -10,7 +10,7 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!isLoading) {
-      router.replace(isAuthenticated ? user?.role === 'teacher' ? '/attendance' : '/dashboard' : '/login');
+      router.replace(isAuthenticated ? user?.role === 'teacher' ? '/academics' : '/dashboard' : '/login');
     }
   }, [isAuthenticated, isLoading, router, user?.role]);
 

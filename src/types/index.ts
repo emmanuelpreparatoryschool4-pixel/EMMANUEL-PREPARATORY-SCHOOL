@@ -548,20 +548,6 @@ export interface ActivityLog {
 // DASHBOARD TYPES
 // ============================================
 
-export interface DashboardStats {
-  totalStudents: number;
-  totalBoys: number;
-  totalGirls: number;
-  totalTeachingStaff: number;
-  totalNonTeachingStaff: number;
-  totalClasses: number;
-  todayAttendance: number;
-  todayAbsent: number;
-  feesCollected: number;
-  outstandingBalances: number;
-  inventoryItems: number;
-}
-
 export interface ChartDataPoint {
   name: string;
   value: number;

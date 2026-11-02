@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, Users, GraduationCap, School, BarChart3, CalendarCheck, BookOpen,
+  LayoutDashboard, Users, School, BarChart3, BookOpen,
   DollarSign, Package, FileText, Settings, UserCog, History, User, X, ChevronLeft, Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -22,10 +22,8 @@ interface SidebarProps {
 const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'owner', 'headmaster'] },
   { label: 'Students', href: '/students', icon: Users, roles: ['admin', 'owner', 'headmaster'] },
-  { label: 'Teachers & Staff', href: '/staff', icon: GraduationCap, roles: ['admin', 'owner', 'headmaster'] },
   { label: 'Classes & Enrollment', href: '/classes', icon: School, roles: ['admin', 'owner', 'headmaster'] },
   { label: 'School Statistics', href: '/statistics', icon: BarChart3, roles: ['admin', 'owner', 'headmaster'] },
-  { label: 'Attendance', href: '/attendance', icon: CalendarCheck, roles: ['admin', 'owner', 'headmaster', 'teacher'] },
   { label: 'Academics & Results', href: '/academics', icon: BookOpen, roles: ['admin', 'owner', 'headmaster', 'teacher'] },
   { label: 'Fees & Payments', href: '/fees', icon: DollarSign, roles: ['admin', 'owner', 'headmaster'] },
   { label: 'Inventory', href: '/inventory', icon: Package, roles: ['admin', 'owner', 'headmaster'] },

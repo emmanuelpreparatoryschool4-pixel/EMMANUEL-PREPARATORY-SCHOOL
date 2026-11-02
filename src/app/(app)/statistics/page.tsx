@@ -5,39 +5,22 @@ import { Download, Printer } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Tabs } from '@/components/ui/Tabs';
 import { dataService } from '@/lib/db';
 import { downloadCSV, calculatePercentage } from '@/lib/utils';
 
 export default function StatisticsPage() {
-  const [teachingStats, setTeachingStats] = useState<Awaited<ReturnType<typeof dataService.getTeachingStaffStats>> | null>(null);
-  const [nonTeachingStats, setNonTeachingStats] = useState<Awaited<ReturnType<typeof dataService.getNonTeachingStaffStats>> | null>(null);
   const [enrollmentData, setEnrollmentData] = useState<{ name: string; boys: number; girls: number; total: number }[]>([]);
-  const [activeTab, setActiveTab] = useState('students');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
-      const [t, nt, e] = await Promise.all([
-        dataService.getTeachingStaffStats(),
-        dataService.getNonTeachingStaffStats(),
-        dataService.getEnrollmentByClass(),
-      ]);
-      setTeachingStats(t);
-      setNonTeachingStats(nt);
-      setEnrollmentData(e);
+      setEnrollmentData(await dataService.getEnrollmentByClass());
       setIsLoading(false);
     }
     load();
   }, []);
 
   if (isLoading) return <div className="h-64 animate-pulse rounded-xl bg-gray-200" />;
-
-  const tabs = [
-    { id: 'students', label: 'Students' },
-    { id: 'teaching', label: 'Teaching Staff' },
-    { id: 'non-teaching', label: 'Non-Teaching Staff' },
-  ];
 
   const totalStudents = enrollmentData.reduce((s, e) => s + e.total, 0);
   const totalBoys = enrollmentData.reduce((s, e) => s + e.boys, 0);
@@ -56,10 +39,7 @@ export default function StatisticsPage() {
           </>
         } />
 
-      <Tabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} className="mb-6" />
-
-      {activeTab === 'students' && (
-        <div className="space-y-6">
+      <div className="space-y-6">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Card className="p-5"><p className="text-sm text-gray-500">Total Students</p><p className="mt-1 text-2xl font-bold text-gray-900">{totalStudents}</p></Card>
             <Card className="p-5"><p className="text-sm text-gray-500">Total Boys</p><p className="mt-1 text-2xl font-bold text-blue-600">{totalBoys} ({calculatePercentage(totalBoys, totalStudents)}%)</p></Card>
@@ -101,89 +81,7 @@ export default function StatisticsPage() {
               </div>
             </CardContent>
           </Card>
-        </div>
-      )}
-
-      {activeTab === 'teaching' && teachingStats && (
-        <Card>
-          <CardHeader><CardTitle>Teaching Staff Statistics</CardTitle></CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Category</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Male</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Female</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {[
-                    ['Trained Teachers', teachingStats.trainedMale, teachingStats.trainedFemale],
-                    ['Untrained Teachers', teachingStats.untrainedMale, teachingStats.untrainedFemale],
-                    ['Using School Bus', teachingStats.maleUsingBus, teachingStats.femaleUsingBus],
-                    ['Walking', teachingStats.maleWalking, teachingStats.femaleWalking],
-                  ].map(([label, m, f]) => (
-                    <tr key={label as string}>
-                      <td className="px-4 py-3 text-sm text-gray-900">{label}</td>
-                      <td className="px-4 py-3 text-right text-sm text-gray-700">{m}</td>
-                      <td className="px-4 py-3 text-right text-sm text-gray-700">{f}</td>
-                      <td className="px-4 py-3 text-right text-sm font-medium text-gray-900">{(m as number) + (f as number)}</td>
-                    </tr>
-                  ))}
-                  <tr className="bg-gray-50 font-semibold">
-                    <td className="px-4 py-3 text-sm text-gray-900">TOTAL TEACHING STAFF</td>
-                    <td className="px-4 py-3 text-right text-sm text-gray-900">{teachingStats.totalMale}</td>
-                    <td className="px-4 py-3 text-right text-sm text-gray-900">{teachingStats.totalFemale}</td>
-                    <td className="px-4 py-3 text-right text-sm text-gray-900">{teachingStats.total}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {activeTab === 'non-teaching' && nonTeachingStats && (
-        <Card>
-          <CardHeader><CardTitle>Non-Teaching Staff Statistics</CardTitle></CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Category</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Male</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Female</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {[
-                    ['Cooks', nonTeachingStats.maleCooks, nonTeachingStats.femaleCooks],
-                    ['Drivers', nonTeachingStats.maleDrivers, nonTeachingStats.femaleDrivers],
-                    ['Other Staff', nonTeachingStats.otherMale, nonTeachingStats.otherFemale],
-                  ].map(([label, m, f]) => (
-                    <tr key={label as string}>
-                      <td className="px-4 py-3 text-sm text-gray-900">{label}</td>
-                      <td className="px-4 py-3 text-right text-sm text-gray-700">{m}</td>
-                      <td className="px-4 py-3 text-right text-sm text-gray-700">{f}</td>
-                      <td className="px-4 py-3 text-right text-sm font-medium text-gray-900">{(m as number) + (f as number)}</td>
-                    </tr>
-                  ))}
-                  <tr className="bg-gray-50 font-semibold">
-                    <td className="px-4 py-3 text-sm text-gray-900">TOTAL NON-TEACHING STAFF</td>
-                    <td className="px-4 py-3 text-right text-sm text-gray-900">{nonTeachingStats.totalMale}</td>
-                    <td className="px-4 py-3 text-right text-sm text-gray-900">{nonTeachingStats.totalFemale}</td>
-                    <td className="px-4 py-3 text-right text-sm text-gray-900">{nonTeachingStats.total}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      </div>
     </div>
   );
 }

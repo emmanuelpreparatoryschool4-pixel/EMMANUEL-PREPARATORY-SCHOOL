@@ -15,7 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { studentSchema, type StudentFormValues } from '@/lib/validations';
 import { dataService } from '@/lib/db';
 import { generateStudentId, generateAdmissionNumber, getErrorMessage } from '@/lib/utils';
-import { GENDERS, GHANA_REGIONS, LANGUAGES, TRANSPORT_ARRANGEMENTS, ENROLLMENT_STATUSES } from '@/lib/constants';
+import { GENDERS, GHANA_REGIONS, TRANSPORT_ARRANGEMENTS, ENROLLMENT_STATUSES } from '@/lib/constants';
 import { Class, AcademicYear } from '@/types';
 
 export default function NewStudentPage() {
@@ -76,13 +76,14 @@ export default function NewStudentPage() {
     if (!user) return;
     setIsSubmitting(true);
     try {
+      const { guardians, ...studentData } = data;
       const studentId = await dataService.addStudent({
         studentId: generateStudentId(),
         admissionNumber: generateAdmissionNumber(),
-        ...data,
+        ...studentData,
       });
 
-      for (const guardian of data.guardians) {
+      for (const guardian of guardians) {
         await dataService.addGuardian({
           ...guardian,
           studentId,

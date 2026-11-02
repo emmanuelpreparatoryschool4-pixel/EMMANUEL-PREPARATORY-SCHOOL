@@ -1477,21 +1477,15 @@ export const dataService = {
     totalStudents: number;
     totalBoys: number;
     totalGirls: number;
-    totalTeachingStaff: number;
-    totalNonTeachingStaff: number;
     totalClasses: number;
-    todayPresent: number;
-    todayAbsent: number;
     feesCollected: number;
     outstandingBalances: number;
     inventoryItems: number;
   }> {
-    const [students, staffCounts, classes, attendanceStats, feesCollected, outstanding, inventoryCount] =
+    const [students, classes, feesCollected, outstanding, inventoryCount] =
       await Promise.all([
         db.students.where('enrollmentStatus').equals('active').toArray(),
-        this.getStaffCount(),
         db.classes.where('status').equals('active').count(),
-        this.getTodayAttendanceStats(),
         this.getFeesCollected(),
         this.getOutstandingBalances(),
         this.getInventoryCount(),
@@ -1501,11 +1495,7 @@ export const dataService = {
       totalStudents: students.length,
       totalBoys: students.filter((s) => s.gender === 'male').length,
       totalGirls: students.filter((s) => s.gender === 'female').length,
-      totalTeachingStaff: staffCounts.teaching,
-      totalNonTeachingStaff: staffCounts.nonTeaching,
       totalClasses: classes,
-      todayPresent: attendanceStats.present,
-      todayAbsent: attendanceStats.absent,
       feesCollected,
       outstandingBalances: outstanding,
       inventoryItems: inventoryCount,

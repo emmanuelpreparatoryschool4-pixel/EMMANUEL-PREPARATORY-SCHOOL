@@ -3,17 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import {
   Users,
-  UserCheck,
-  GraduationCap,
   School,
-  CalendarCheck,
-  UserX,
   DollarSign,
   AlertCircle,
   Package,
-  Plus,
   UserPlus,
-  ClipboardCheck,
   Receipt,
 } from 'lucide-react';
 import {
@@ -43,11 +37,7 @@ interface DashboardStats {
   totalStudents: number;
   totalBoys: number;
   totalGirls: number;
-  totalTeachingStaff: number;
-  totalNonTeachingStaff: number;
   totalClasses: number;
-  todayPresent: number;
-  todayAbsent: number;
   feesCollected: number;
   outstandingBalances: number;
   inventoryItems: number;
@@ -91,13 +81,6 @@ export default function DashboardPage() {
       ]
     : [];
 
-  const attendanceData = stats
-    ? [
-        { name: 'Present', value: stats.todayPresent || 0 },
-        { name: 'Absent', value: stats.todayAbsent || 0 },
-      ]
-    : [];
-
   // Fee collection mock trend (derived from real data would require historical records)
   const feeTrendData = [
     { month: 'Sep', amount: Math.round((stats?.feesCollected ?? 0) * 0.15) },
@@ -110,8 +93,6 @@ export default function DashboardPage() {
 
   const quickActions = [
     { label: 'Add Student', href: '/students/new', icon: UserPlus },
-    { label: 'Record Attendance', href: '/attendance', icon: ClipboardCheck },
-    { label: 'Add Staff', href: '/staff/new', icon: Plus },
     { label: 'Record Payment', href: '/fees/payments/new', icon: Receipt },
   ];
 
@@ -120,11 +101,7 @@ export default function DashboardPage() {
         { title: 'Total Students', value: stats.totalStudents, icon: Users, color: 'text-blue-600 bg-blue-100' },
         { title: 'Boys', value: stats.totalBoys, icon: Users, color: 'text-cyan-600 bg-cyan-100' },
         { title: 'Girls', value: stats.totalGirls, icon: Users, color: 'text-pink-600 bg-pink-100' },
-        { title: 'Teaching Staff', value: stats.totalTeachingStaff, icon: GraduationCap, color: 'text-purple-600 bg-purple-100' },
-        { title: 'Non-Teaching Staff', value: stats.totalNonTeachingStaff, icon: UserCheck, color: 'text-orange-600 bg-orange-100' },
         { title: 'Total Classes', value: stats.totalClasses, icon: School, color: 'text-green-600 bg-green-100' },
-        { title: "Today's Present", value: stats.todayPresent, icon: CalendarCheck, color: 'text-emerald-600 bg-emerald-100' },
-        { title: 'Absent Today', value: stats.todayAbsent, icon: UserX, color: 'text-red-600 bg-red-100' },
         { title: 'Fees Collected', value: formatCurrencyCompact(stats.feesCollected), icon: DollarSign, color: 'text-green-600 bg-green-100' },
         { title: 'Outstanding Balances', value: formatCurrencyCompact(stats.outstandingBalances), icon: AlertCircle, color: 'text-yellow-600 bg-yellow-100' },
         { title: 'Inventory Items', value: stats.inventoryItems, icon: Package, color: 'text-indigo-600 bg-indigo-100' },
@@ -158,7 +135,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3">
         {quickActions.map((action) => {
           const Icon = action.icon;
           return (
@@ -251,34 +228,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts Row 2 */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Attendance Overview */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Today&apos;s Attendance</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={attendanceData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={90}
-                    dataKey="value"
-                    label={({ name, value }) => `${name}: ${value}`}
-                  >
-                    <Cell fill="#22c55e" />
-                    <Cell fill="#ef4444" />
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
+      <div className="grid grid-cols-1 gap-6">
         {/* Fee Collection Trend */}
         <Card>
           <CardHeader>

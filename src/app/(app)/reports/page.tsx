@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { FileText, Download, Printer, Users, GraduationCap, CalendarCheck, DollarSign, Package, BarChart3 } from 'lucide-react';
+import { FileText, Download, Printer, Users, DollarSign, Package, BarChart3 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -13,8 +13,6 @@ import { downloadCSV } from '@/lib/utils';
 const reportTypes = [
   { id: 'enrollment', label: 'Student Enrollment Report', icon: Users, description: 'Enrollment figures by class, gender, and transport' },
   { id: 'class-register', label: 'Class Register', icon: FileText, description: 'Printable class register with student details' },
-  { id: 'staff', label: 'Staff Report', icon: GraduationCap, description: 'Teaching and non-teaching staff breakdown' },
-  { id: 'attendance', label: 'Attendance Report', icon: CalendarCheck, description: 'Attendance statistics by class and period' },
   { id: 'academic', label: 'Academic Performance', icon: BarChart3, description: 'Assessment results and performance analysis' },
   { id: 'fees', label: 'Fee Collection Report', icon: DollarSign, description: 'Fees collected and outstanding balances' },
   { id: 'debt', label: 'Outstanding Debt Report', icon: DollarSign, description: 'Students with outstanding fee balances' },
@@ -32,12 +30,6 @@ export default function ReportsPage() {
       if (selectedReport === 'enrollment') {
         const data = await dataService.getEnrollmentByClass();
         downloadCSV(data.map((d) => ({ Class: d.name, Boys: d.boys, Girls: d.girls, Total: d.total })), 'enrollment-report');
-      } else if (selectedReport === 'staff') {
-        const staff = await dataService.getStaff();
-        downloadCSV(staff.map((s) => ({
-          'Staff ID': s.staffId, Name: `${s.firstName} ${s.lastName}`, Category: s.staffCategory,
-          Gender: s.gender, Trained: s.isTrained ? 'Yes' : 'No', Status: s.employmentStatus,
-        })), 'staff-report');
       } else if (selectedReport === 'inventory') {
         const items = await dataService.getInventoryItems();
         downloadCSV(items.map((i) => ({

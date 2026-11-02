@@ -9,8 +9,7 @@ import { useEffect } from 'react';
 
 function canAccessPath(role: string | undefined, pathname: string): boolean {
   if (role !== 'teacher') return true;
-  return pathname === '/attendance' ||
-    pathname === '/academics' ||
+  return pathname === '/academics' ||
     (pathname.startsWith('/academics/assessments/') && pathname.endsWith('/scores')) ||
     pathname === '/profile';
 }
@@ -26,7 +25,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     if (!isLoading && !isAuthenticated) {
       router.push('/login');
     } else if (!canAccessPath(user?.role, pathname)) {
-      router.replace('/attendance');
+      router.replace('/academics');
     }
   }, [isAuthenticated, isLoading, pathname, router, user?.role]);
 
