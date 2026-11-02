@@ -4,25 +4,13 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard,
-  Users,
-  GraduationCap,
-  School,
-  BarChart3,
-  CalendarCheck,
-  BookOpen,
-  DollarSign,
-  Package,
-  FileText,
-  Settings,
-  UserCog,
-  History,
-  User,
-  X,
-  ChevronLeft,
+  LayoutDashboard, Users, GraduationCap, School, BarChart3, CalendarCheck, BookOpen,
+  DollarSign, Package, FileText, Settings, UserCog, History, User, X, ChevronLeft, Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePWAInstall } from '@/contexts/PWAInstallContext';
+import { useToast } from '@/contexts/ToastContext';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -32,29 +20,55 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['owner', 'headmaster'] },
-  { label: 'Students', href: '/students', icon: Users, roles: ['owner', 'headmaster'] },
-  { label: 'Teachers & Staff', href: '/staff', icon: GraduationCap, roles: ['owner', 'headmaster'] },
-  { label: 'Classes & Enrollment', href: '/classes', icon: School, roles: ['owner', 'headmaster'] },
-  { label: 'School Statistics', href: '/statistics', icon: BarChart3, roles: ['owner', 'headmaster'] },
-  { label: 'Attendance', href: '/attendance', icon: CalendarCheck, roles: ['owner', 'headmaster'] },
-  { label: 'Academics & Results', href: '/academics', icon: BookOpen, roles: ['owner', 'headmaster'] },
-  { label: 'Fees & Payments', href: '/fees', icon: DollarSign, roles: ['owner', 'headmaster'] },
-  { label: 'Inventory', href: '/inventory', icon: Package, roles: ['owner', 'headmaster'] },
-  { label: 'Reports', href: '/reports', icon: FileText, roles: ['owner', 'headmaster'] },
-  { label: 'School Settings', href: '/settings', icon: Settings, roles: ['owner'] },
-  { label: 'User Management', href: '/users', icon: UserCog, roles: ['owner'] },
-  { label: 'Activity History', href: '/activity', icon: History, roles: ['owner', 'headmaster'] },
-  { label: 'My Profile', href: '/profile', icon: User, roles: ['owner', 'headmaster'] },
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'owner', 'headmaster'] },
+  { label: 'Students', href: '/students', icon: Users, roles: ['admin', 'owner', 'headmaster'] },
+  { label: 'Teachers & Staff', href: '/staff', icon: GraduationCap, roles: ['admin', 'owner', 'headmaster'] },
+  { label: 'Classes & Enrollment', href: '/classes', icon: School, roles: ['admin', 'owner', 'headmaster'] },
+  { label: 'School Statistics', href: '/statistics', icon: BarChart3, roles: ['admin', 'owner', 'headmaster'] },
+  { label: 'Attendance', href: '/attendance', icon: CalendarCheck, roles: ['admin', 'owner', 'headmaster', 'teacher'] },
+  { label: 'Academics & Results', href: '/academics', icon: BookOpen, roles: ['admin', 'owner', 'headmaster', 'teacher'] },
+  { label: 'Fees & Payments', href: '/fees', icon: DollarSign, roles: ['admin', 'owner', 'headmaster'] },
+  { label: 'Inventory', href: '/inventory', icon: Package, roles: ['admin', 'owner', 'headmaster'] },
+  { label: 'Reports', href: '/reports', icon: FileText, roles: ['admin', 'owner', 'headmaster'] },
+  { label: 'School Settings', href: '/settings', icon: Settings, roles: ['admin', 'owner'] },
+  { label: 'User Management', href: '/users', icon: UserCog, roles: ['admin', 'owner'] },
+  { label: 'Activity History', href: '/activity', icon: History, roles: ['admin', 'owner', 'headmaster'] },
+  { label: 'My Profile', href: '/profile', icon: User, roles: ['admin', 'owner', 'headmaster', 'teacher'] },
 ];
 
 export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: SidebarProps) {
   const pathname = usePathname();
   const { user } = useAuth();
+  const { isInstalled, installApp } = usePWAInstall();
+  const { addToast } = useToast();
 
   const filteredItems = navItems.filter(
     (item) => user && item.roles.includes(user.role)
   );
+
+  const handleInstall = async () => {
+    try {
+      const outcome = await installApp();
+      if (outcome === 'accepted') {
+        addToast({ type: 'success', title: 'App installed', message: 'You can now open EPS from your device.' });
+      } else if (outcome === 'dismissed') {
+        addToast({ type: 'info', title: 'Install cancelled' });
+      } else {
+        addToast({
+          type: 'info',
+          title: 'Install from your browser',
+          message: 'Open the browser menu and choose Install app or Add to Home Screen.',
+          duration: 8000,
+        });
+      }
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Could not install the app',
+        message: error instanceof Error ? error.message : 'Try installing from your browser menu.',
+      });
+    }
+  };
 
   return (
     <>
@@ -132,6 +146,20 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
 
         {/* Collapse toggle */}
         <div className="border-t border-gray-800 p-3">
+          {!isInstalled && (
+            <button
+              onClick={() => void handleInstall()}
+              className={cn(
+                'mb-2 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-300',
+                'hover:bg-gray-800 hover:text-white',
+                collapsed && 'justify-center px-2'
+              )}
+              title={collapsed ? 'Install app' : undefined}
+            >
+              <Download className="h-5 w-5 flex-shrink-0" />
+              {!collapsed && <span>Install App</span>}
+            </button>
+          )}
           <button
             onClick={onToggleCollapse}
             className={cn(

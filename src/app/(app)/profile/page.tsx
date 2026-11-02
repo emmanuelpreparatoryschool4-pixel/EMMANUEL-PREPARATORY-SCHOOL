@@ -17,7 +17,7 @@ import { formatDate } from '@/lib/utils';
 
 export default function ProfilePage() {
   const { user } = useAuth();
-  const { installApp } = usePWAInstall();
+  const { installApp, isInstalled } = usePWAInstall();
   const { addToast } = useToast();
   const router = useRouter();
   const [isRequestingReset, setIsRequestingReset] = useState(false);
@@ -35,16 +35,24 @@ export default function ProfilePage() {
   if (!user) return null;
 
   const handleInstall = async () => {
-    const result = await installApp();
-    if (result === 'accepted') {
-      addToast({ type: 'success', title: 'App installed' });
-    } else if (result === 'dismissed') {
-      addToast({ type: 'info', title: 'Installation cancelled' });
-    } else {
+    try {
+      const result = await installApp();
+      if (result === 'accepted') {
+        addToast({ type: 'success', title: 'App installed' });
+      } else if (result === 'dismissed') {
+        addToast({ type: 'info', title: 'Installation cancelled' });
+      } else {
+        addToast({
+          type: 'info',
+          title: 'Install from your browser',
+          message: 'Open the browser menu and choose Install app or Add to Home Screen.',
+        });
+      }
+    } catch (error) {
       addToast({
-        type: 'info',
-        title: 'Install from your browser',
-        message: 'Open the browser menu and choose Install app or Add to Home Screen.',
+        type: 'error',
+        title: 'Could not install the app',
+        message: error instanceof Error ? error.message : 'Try installing from your browser menu.',
       });
     }
   };
@@ -112,8 +120,8 @@ export default function ProfilePage() {
           <h2 className="mt-4 text-lg font-semibold text-gray-900">{user.name}</h2>
           <p className="text-sm text-gray-500">{user.email}</p>
           <div className="mt-3 flex justify-center">
-            <Badge className={user.role === 'owner' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}>
-              {user.role === 'owner' ? 'School Owner' : 'Headmaster'}
+            <Badge className={user.role === 'admin' || user.role === 'owner' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}>
+              {user.role === 'admin' ? 'Platform Admin' : user.role === 'owner' ? 'School Owner' : user.role === 'teacher' ? 'Teacher' : 'Headmaster'}
             </Badge>
           </div>
         </Card>
@@ -131,7 +139,7 @@ export default function ProfilePage() {
             </div>
             <div className="flex items-center gap-3 border-b border-gray-100 pb-3">
               <Shield className="h-5 w-5 text-gray-400" />
-              <div><p className="text-xs text-gray-500">Role</p><p className="text-sm font-medium text-gray-900">{user.role === 'owner' ? 'School Owner' : 'Headmaster'}</p></div>
+              <div><p className="text-xs text-gray-500">Role</p><p className="text-sm font-medium text-gray-900">{user.role === 'admin' ? 'Platform Admin' : user.role === 'owner' ? 'School Owner' : user.role === 'teacher' ? 'Teacher' : 'Headmaster'}</p></div>
             </div>
             <div className="flex items-center gap-3">
               <Calendar className="h-5 w-5 text-gray-400" />
@@ -140,9 +148,11 @@ export default function ProfilePage() {
             <div className="border-t border-gray-100 pt-4">
               <p className="mb-3 text-sm font-semibold text-gray-900">App &amp; security</p>
               <div className="flex flex-wrap gap-3">
-                <Button variant="outline" leftIcon={<Download className="h-4 w-4" />} onClick={handleInstall}>
-                  Install App
-                </Button>
+                {!isInstalled && (
+                  <Button variant="outline" leftIcon={<Download className="h-4 w-4" />} onClick={handleInstall}>
+                    Install App
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   leftIcon={<KeyRound className="h-4 w-4" />}

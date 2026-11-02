@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useSyncExternalStore } from 'react';
-import { Save, Cloud, CloudOff, CheckCircle, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Save, Cloud, CloudOff, CheckCircle } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -229,9 +229,11 @@ export default function AttendancePage() {
           )}
 
           <div className="mt-6 flex justify-end gap-3">
-            <Button variant="outline" onClick={() => handleSave('local')} isLoading={isSaving} leftIcon={<Save className="h-4 w-4" />}>
-              Save Draft (Local)
-            </Button>
+            {user?.role !== 'teacher' && (
+              <Button variant="outline" onClick={() => handleSave('local')} isLoading={isSaving} leftIcon={<Save className="h-4 w-4" />}>
+                Save Draft (Local)
+              </Button>
+            )}
             <Button onClick={() => handleSave('pending')} isLoading={isSaving} leftIcon={<CheckCircle className="h-4 w-4" />}>
               Save Attendance
             </Button>

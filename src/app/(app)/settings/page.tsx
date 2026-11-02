@@ -45,8 +45,12 @@ export default function SettingsPage() {
     try {
       await dataService.updateSchoolSettings(data);
       addToast({ type: 'success', title: 'Settings saved' });
-    } catch {
-      addToast({ type: 'error', title: 'Error', message: 'Failed to save settings.' });
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to save settings.',
+      });
     } finally {
       setIsSubmitting(false);
     }

@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/contexts/ToastContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { dataService } from '@/lib/db';
 import { Assessment, Student } from '@/types';
 
@@ -14,6 +15,7 @@ export default function AssessmentScoresPage() {
 	const { id } = useParams<{ id: string }>();
 	const router = useRouter();
 	const { addToast } = useToast();
+	const { user } = useAuth();
 	const [assessment, setAssessment] = useState<Assessment | null>(null);
 	const [students, setStudents] = useState<Student[]>([]);
 	const [scores, setScores] = useState<Record<string, string>>({});
@@ -91,7 +93,7 @@ export default function AssessmentScoresPage() {
 
 		setIsSaving(true);
 		try {
-			await dataService.saveAssessmentScores(id, entries);
+			await dataService.saveAssessmentScores(id, entries, user?.role !== 'teacher');
 			const savedScores = await dataService.getAssessmentScores(id);
 			setAssessment((current) =>
 				current

@@ -4,20 +4,31 @@ import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
+function canAccessPath(role: string | undefined, pathname: string): boolean {
+  if (role !== 'teacher') return true;
+  return pathname === '/attendance' ||
+    pathname === '/academics' ||
+    (pathname.startsWith('/academics/assessments/') && pathname.endsWith('/scores')) ||
+    pathname === '/profile';
+}
+
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.push('/login');
+    } else if (!canAccessPath(user?.role, pathname)) {
+      router.replace('/attendance');
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, isLoading, pathname, router, user?.role]);
 
   if (isLoading) {
     return (
@@ -30,7 +41,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!isAuthenticated) return null;
+  if (!isAuthenticated || !canAccessPath(user?.role, pathname)) return null;
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">

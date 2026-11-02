@@ -13,7 +13,7 @@ interface AuthContextType extends AuthState {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function isUserRole(role: string): role is UserRole {
-  return role === 'owner' || role === 'headmaster';
+  return role === 'admin' || role === 'owner' || role === 'headmaster' || role === 'teacher';
 }
 
 async function getProfileUser(userId: string): Promise<User | null> {
@@ -89,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await supabase.auth.signOut();
       return {
         success: false,
-        error: 'Your account has no valid owner or headmaster profile. Contact the school owner.',
+          error: 'Your account does not have an active school role. Contact the school owner.',
       };
     }
 

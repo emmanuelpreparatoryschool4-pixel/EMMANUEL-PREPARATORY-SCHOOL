@@ -19,7 +19,7 @@ export default function StaffProfilePage() {
   const router = useRouter();
   const { user } = useAuth();
   const staffId = params.id as string;
-  const isOwner = user?.role === 'owner';
+  const isOwner = user?.role === 'owner' || user?.role === 'admin';
 
   const [staff, setStaff] = useState<Staff | null>(null);
   const [qualifications, setQualifications] = useState<Qualification[]>([]);

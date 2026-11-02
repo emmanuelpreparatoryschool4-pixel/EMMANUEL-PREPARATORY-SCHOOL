@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Plus, FileText, ClipboardList } from 'lucide-react';
+import { Plus, FileText, ClipboardList } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -11,9 +11,11 @@ import { Tabs } from '@/components/ui/Tabs';
 import { dataService } from '@/lib/db';
 import { Assessment, AssessmentType, Subject } from '@/types';
 import { formatDate } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function AcademicsPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [assessmentTypes, setAssessmentTypes] = useState<AssessmentType[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -53,11 +55,11 @@ export default function AcademicsPage() {
   return (
     <div>
       <PageHeader title="Academics & Results" description="Manage assessments, scores, and report cards"
-        actions={
+        actions={user?.role === 'teacher' ? undefined : (
           <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => router.push('/academics/assessments/new')}>
             Create Assessment
           </Button>
-        } />
+        )} />
 
       <Tabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} className="mb-6" />
 
@@ -70,9 +72,11 @@ export default function AcademicsPage() {
                 <ClipboardList className="mx-auto h-10 w-10 text-gray-300" />
                 <p className="mt-3 text-sm font-medium text-gray-900">No assessments created</p>
                 <p className="mt-1 text-sm text-gray-500">Create an assessment to begin entering scores.</p>
-                <Button className="mt-4" leftIcon={<Plus className="h-4 w-4" />} onClick={() => router.push('/academics/assessments/new')}>
-                  Create Assessment
-                </Button>
+                {user?.role !== 'teacher' && (
+                  <Button className="mt-4" leftIcon={<Plus className="h-4 w-4" />} onClick={() => router.push('/academics/assessments/new')}>
+                    Create Assessment
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="space-y-3">

@@ -5,14 +5,14 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function HomePage() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!isLoading) {
-      router.replace(isAuthenticated ? '/dashboard' : '/login');
+      router.replace(isAuthenticated ? user?.role === 'teacher' ? '/attendance' : '/dashboard' : '/login');
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, isLoading, router, user?.role]);
 
   return (
     <div className="flex h-screen items-center justify-center bg-gray-50">

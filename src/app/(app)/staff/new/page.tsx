@@ -22,7 +22,7 @@ export default function NewStaffPage() {
   const { addToast } = useToast();
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const isOwner = user?.role === 'owner';
+  const isOwner = user?.role === 'owner' || user?.role === 'admin';
 
   const { register, handleSubmit, formState: { errors } } = useForm<StaffFormValues>({
     resolver: zodResolver(staffSchema),

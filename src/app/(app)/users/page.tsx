@@ -8,13 +8,26 @@ import { Badge } from '@/components/ui/Badge';
 import { Table } from '@/components/ui/Table';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
+import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
-import { User, TableColumn } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
+import { dataService } from '@/lib/db';
+import { User, UserRole, TableColumn } from '@/types';
 
 export default function UsersPage() {
+  const { user: currentUser } = useAuth();
+  const { addToast } = useToast();
   const [users, setUsers] = useState<User[]>([]);
+  const [staffOptions, setStaffOptions] = useState<Array<{ value: string; label: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isInviting, setIsInviting] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<Exclude<UserRole, 'admin'>>('headmaster');
+  const [staffId, setStaffId] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -26,29 +39,45 @@ export default function UsersPage() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, email, full_name, role, created_at, updated_at')
-        .order('created_at');
+      try {
+        const [{ data, error }, staff] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('id, email, full_name, role, created_at, updated_at')
+            .order('created_at'),
+          dataService.getStaff(),
+        ]);
 
-      if (!active) return;
-      if (error) {
-        setLoadError('Unable to load school accounts.');
-      } else {
-        setUsers(
-          (data ?? [])
-            .filter((profile) => profile.role === 'owner' || profile.role === 'headmaster')
-            .map((profile) => ({
-              id: profile.id,
-              email: profile.email,
-              name: profile.full_name,
-              role: profile.role,
-              createdAt: profile.created_at,
-              updatedAt: profile.updated_at,
-            }))
-        );
+        if (!active) return;
+        if (error) {
+          setLoadError(error.message);
+        } else {
+          setUsers(
+            (data ?? [])
+              .filter((profile) => ['admin', 'owner', 'headmaster', 'teacher'].includes(profile.role))
+              .map((profile) => ({
+                id: profile.id,
+                email: profile.email,
+                name: profile.full_name,
+                role: profile.role as UserRole,
+                createdAt: profile.created_at,
+                updatedAt: profile.updated_at,
+              }))
+          );
+          setStaffOptions(staff
+            .filter((member) => ['teacher', 'headteacher'].includes(member.staffCategory))
+            .map((member) => ({
+            value: member.id,
+            label: `${member.firstName} ${member.lastName} (${member.staffId})`,
+            })));
+        }
+      } catch (error) {
+        if (active) {
+          setLoadError(error instanceof Error ? error.message : 'Unable to load users and staff records.');
+        }
+      } finally {
+        if (active) setIsLoading(false);
       }
-      setIsLoading(false);
     }
 
     void loadUsers();
@@ -56,6 +85,68 @@ export default function UsersPage() {
       active = false;
     };
   }, []);
+
+  const roleLabel = (value: UserRole) => ({
+    admin: 'Platform Admin',
+    owner: 'School Owner',
+    headmaster: 'Headmaster',
+    teacher: 'Teacher',
+  })[value];
+
+  const handleInvite = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!supabase) {
+      addToast({ type: 'error', title: 'Supabase is not configured' });
+      return;
+    }
+    if (role === 'teacher' && !staffId) {
+      addToast({ type: 'error', title: 'Select a teacher record' });
+      return;
+    }
+
+    setIsInviting(true);
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!session) throw new Error('Your session has expired. Sign in again.');
+
+      const response = await fetch('/api/users/invite', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ fullName, email, role, staffId: staffId || undefined }),
+      });
+      const result = await response.json() as { message?: string; error?: string; userId?: string };
+      if (!response.ok) throw new Error(result.error || 'Unable to send the invitation.');
+
+      addToast({ type: 'success', title: 'Invitation sent', message: result.message });
+      const invitedUserId = result.userId;
+      if (invitedUserId) {
+        const now = new Date().toISOString();
+        setUsers((current) => [...current, {
+          id: invitedUserId,
+          email: email.trim().toLowerCase(),
+          name: fullName.trim(),
+          role,
+          createdAt: now,
+          updatedAt: now,
+        }]);
+      }
+      setFullName('');
+      setEmail('');
+      setStaffId('');
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Could not invite user',
+        message: error instanceof Error ? error.message : 'Unable to send the invitation.',
+      });
+    } finally {
+      setIsInviting(false);
+    }
+  };
 
   const columns: TableColumn<User>[] = [
     { key: 'name', header: 'User', render: (u) => (
@@ -65,8 +156,8 @@ export default function UsersPage() {
       </div>
     )},
     { key: 'role', header: 'Role', render: (u) => (
-      <Badge className={u.role === 'owner' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}>
-        {u.role === 'owner' ? 'School Owner' : 'Headmaster'}
+      <Badge className={u.role === 'admin' || u.role === 'owner' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}>
+        {roleLabel(u.role)}
       </Badge>
     )},
   ];
@@ -75,15 +166,64 @@ export default function UsersPage() {
     <div>
       <PageHeader title="User Management" description="Manage system users and roles" />
 
+      {currentUser?.role === 'admin' || currentUser?.role === 'owner' ? (
+        <Card className="mb-6 p-5">
+          <CardHeader><CardTitle>Invite a school user</CardTitle></CardHeader>
+          <CardContent>
+            <form onSubmit={handleInvite} className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Input label="Full name" value={fullName} onChange={(event) => setFullName(event.target.value)} required />
+              <Input label="Email address" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+              <Select
+                label="Role"
+                value={role}
+                onChange={(event) => {
+                  setRole(event.target.value as Exclude<UserRole, 'admin'>);
+                  setStaffId('');
+                }}
+                options={[
+                  ...(currentUser.role === 'admin' ? [{ value: 'owner', label: 'School Owner' }] : []),
+                  { value: 'headmaster', label: 'Headmaster' },
+                  { value: 'teacher', label: 'Teacher' },
+                ]}
+              />
+              {role === 'teacher' && (
+                <Select
+                  label="Link staff record"
+                  value={staffId}
+                  onChange={(event) => setStaffId(event.target.value)}
+                  options={staffOptions}
+                  placeholder="Choose a teacher"
+                  required
+                />
+              )}
+              <div className="md:col-span-2">
+                <Button type="submit" isLoading={isInviting} leftIcon={<UserCog className="h-4 w-4" />}>
+                  Send email invitation
+                </Button>
+              </div>
+            </form>
+            <p className="mt-3 text-xs text-gray-500">
+              The invitee sets their own password from the email. Teachers can access attendance and academics for their assigned class.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card className="p-4">
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <strong>Account setup:</strong> Create Supabase Auth accounts for school users; only owner and headmaster profiles appear here.
+          <strong>Account setup:</strong> Admins can invite school owners, headmasters, and teachers. School owners can invite headmasters and teachers.
         </div>
         {loadError && <p role="alert" className="mb-4 text-sm text-red-700">{loadError}</p>}
         <Table columns={columns} data={users} keyExtractor={(u) => u.id} isLoading={isLoading} />
       </Card>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Card className="p-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-100 text-red-600"><Shield className="h-5 w-5" /></div>
+            <div><p className="font-medium text-gray-900">Platform Admin</p><p className="text-sm text-gray-500">Platform-level account and school owner setup</p></div>
+          </div>
+        </Card>
         <Card className="p-5">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100 text-purple-600"><Shield className="h-5 w-5" /></div>
@@ -93,7 +233,13 @@ export default function UsersPage() {
         <Card className="p-5">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600"><GraduationCap className="h-5 w-5" /></div>
-            <div><p className="font-medium text-gray-900">Headmaster</p><p className="text-sm text-gray-500">School operations access without owner-only staff financial details</p></div>
+            <div><p className="font-medium text-gray-900">Headmaster</p><p className="text-sm text-gray-500">School operations without owner-only account or private staff access</p></div>
+          </div>
+        </Card>
+        <Card className="p-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100 text-green-600"><GraduationCap className="h-5 w-5" /></div>
+            <div><p className="font-medium text-gray-900">Teacher</p><p className="text-sm text-gray-500">Attendance and academic records for their assigned class</p></div>
           </div>
         </Card>
       </div>

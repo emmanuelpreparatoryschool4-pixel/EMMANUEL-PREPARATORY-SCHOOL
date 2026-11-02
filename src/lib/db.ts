@@ -276,11 +276,19 @@ class SupabaseTable<T> extends SupabaseCollection<T> {
   }
 
   async update(id: string, value: Partial<T>): Promise<void> {
-    const { error } = await getSupabase()
+    const { data, error } = await getSupabase()
       .from(this.tableName)
       .update(toDatabase(value, this.tableName) as Record<string, unknown>)
-      .eq('id', id);
+      .eq('id', id)
+      .select('id')
+      .maybeSingle();
     if (error) throw error;
+    if (!data) {
+      const guidance = this.tableName === 'school_settings'
+        ? ' Only owner accounts can edit school settings; promote this profile to owner in Supabase if appropriate.'
+        : ' Check that the record exists and your account has permission to edit it.';
+      throw new Error(`No ${this.tableName} record was updated.${guidance}`);
+    }
   }
 
   async delete(id: string): Promise<void> {
@@ -1256,7 +1264,8 @@ export const dataService = {
 
   async saveAssessmentScores(
     assessmentId: string,
-    scores: Array<{ studentId: string; score: number | null }>
+    scores: Array<{ studentId: string; score: number | null }>,
+    updateAssessmentStatus = true
   ): Promise<void> {
     const assessment = await db.assessments.get(assessmentId);
     if (!assessment) throw new Error('Assessment not found.');
@@ -1288,11 +1297,13 @@ export const dataService = {
     if (scoresToSave.length) await db.assessmentScores.bulkPut(scoresToSave);
     if (scoreIdsToDelete.length) await db.assessmentScores.bulkDelete(scoreIdsToDelete);
 
-    const isComplete = scores.length > 0 && scores.every((entry) => entry.score !== null);
-    await db.assessments.update(assessmentId, {
-      status: isComplete ? 'graded' : 'open',
-      updatedAt: now,
-    });
+    if (updateAssessmentStatus) {
+      const isComplete = scores.length > 0 && scores.every((entry) => entry.score !== null);
+      await db.assessments.update(assessmentId, {
+        status: isComplete ? 'graded' : 'open',
+        updatedAt: now,
+      });
+    }
   },
 
   // Invoices
