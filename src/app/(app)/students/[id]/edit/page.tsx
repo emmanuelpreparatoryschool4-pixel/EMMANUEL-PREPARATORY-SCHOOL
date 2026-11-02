@@ -13,6 +13,7 @@ import { Select } from '@/components/ui/Select';
 import { useToast } from '@/contexts/ToastContext';
 import { studentSchema, type StudentFormValues } from '@/lib/validations';
 import { dataService } from '@/lib/db';
+import { getErrorMessage } from '@/lib/utils';
 import { GENDERS, GHANA_REGIONS, TRANSPORT_ARRANGEMENTS, ENROLLMENT_STATUSES } from '@/lib/constants';
 import { Class, AcademicYear, Guardian } from '@/types';
 
@@ -99,8 +100,8 @@ export default function EditStudentPage() {
 
       addToast({ type: 'success', title: 'Updated', message: 'Student updated successfully.' });
       router.push(`/students/${studentId}`);
-    } catch {
-      addToast({ type: 'error', title: 'Error', message: 'Failed to update student.' });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Could not update student', message: getErrorMessage(error, 'Failed to update student.') });
     } finally {
       setIsSubmitting(false);
     }

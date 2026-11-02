@@ -15,6 +15,7 @@ import { dataService } from '@/lib/db';
 import { Class } from '@/types';
 import { ITEM_CONDITIONS, ITEM_STATUSES } from '@/lib/constants';
 import { inventoryItemSchema, type InventoryItemFormValues } from '@/lib/validations';
+import { getErrorMessage } from '@/lib/utils';
 
 export default function EditInventoryItemPage() {
   const router = useRouter();
@@ -53,8 +54,8 @@ export default function EditInventoryItemPage() {
       await dataService.updateInventoryItem(itemId, data);
       addToast({ type: 'success', title: 'Updated' });
       router.push(`/inventory/${itemId}`);
-    } catch {
-      addToast({ type: 'error', title: 'Error', message: 'Failed to update item.' });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Could not update item', message: getErrorMessage(error, 'Failed to update item.') });
     } finally {
       setIsSubmitting(false);
     }

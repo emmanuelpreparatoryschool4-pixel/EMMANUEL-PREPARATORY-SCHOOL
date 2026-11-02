@@ -10,6 +10,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { dataService } from '@/lib/db';
 import { Assessment, Student } from '@/types';
+import { getErrorMessage } from '@/lib/utils';
 
 export default function AssessmentScoresPage() {
 	const { id } = useParams<{ id: string }>();
@@ -107,8 +108,8 @@ export default function AssessmentScoresPage() {
 				Object.fromEntries(savedScores.map((score) => [score.studentId, String(score.score)]))
 			);
 			addToast({ type: 'success', title: 'Scores saved' });
-		} catch {
-			addToast({ type: 'error', title: 'Error', message: 'Failed to save assessment scores.' });
+		} catch (error) {
+			addToast({ type: 'error', title: 'Could not save scores', message: getErrorMessage(error, 'Failed to save assessment scores.') });
 		} finally {
 			setIsSaving(false);
 		}

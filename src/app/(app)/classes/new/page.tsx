@@ -13,6 +13,7 @@ import { Select } from '@/components/ui/Select';
 import { useToast } from '@/contexts/ToastContext';
 import { classSchema, type ClassFormValues } from '@/lib/validations';
 import { dataService } from '@/lib/db';
+import { getErrorMessage } from '@/lib/utils';
 import { AcademicYear, Staff } from '@/types';
 
 export default function NewClassPage() {
@@ -45,8 +46,8 @@ export default function NewClassPage() {
       await dataService.addClass({ ...data, status: 'active', order: existing.length + 1 });
       addToast({ type: 'success', title: 'Class added' });
       router.push('/classes');
-    } catch {
-      addToast({ type: 'error', title: 'Error', message: 'Failed to add class.' });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Could not add class', message: getErrorMessage(error, 'Failed to add class.') });
     } finally {
       setIsSubmitting(false);
     }

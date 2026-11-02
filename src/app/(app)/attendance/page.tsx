@@ -13,7 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { dataService } from '@/lib/db';
 import { Class, Student, AttendanceRecord, AttendanceStatus, SyncStatus } from '@/types';
 import { ATTENDANCE_STATUSES } from '@/lib/constants';
-import { formatDate } from '@/lib/utils';
+import { formatDate, getErrorMessage } from '@/lib/utils';
 
 function subscribeToConnection(callback: () => void) {
   window.addEventListener('online', callback);
@@ -131,8 +131,8 @@ export default function AttendancePage() {
         title: 'Saved',
         message: syncStatus === 'local' ? 'Attendance saved locally. Pending sync.' : 'Attendance saved.',
       });
-    } catch {
-      addToast({ type: 'error', title: 'Error', message: 'Failed to save attendance.' });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Could not save attendance', message: getErrorMessage(error, 'Failed to save attendance.') });
     } finally {
       setIsSaving(false);
     }

@@ -31,6 +31,8 @@ where email = 'school-owner@example.com';
 
 The app uses Supabase Auth for sign-in and loads account profiles from Supabase. Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to Vercel (the URL and public anon/publishable key are browser-visible by design). User invitations also require `SUPABASE_SERVICE_ROLE_KEY` as a server-only environment variable. Use [.env.example](.env.example) as a local template. Never add the service-role key to a `NEXT_PUBLIC_` variable.
 
+For local development, create `.env.local` from `.env.example`, replace the URL and anon-key placeholders with the values from **Supabase > Project Settings > API**, then restart `npm run dev`. These two `NEXT_PUBLIC_` values are required for all app reads and writes; the service-role key is only needed for sending account invitations. Never commit `.env.local`.
+
 For password recovery, add `https://YOUR-VERCEL-DOMAIN/profile?password-recovery=1` to Supabase **Authentication > URL Configuration > Redirect URLs**. Add your local URL there too when testing locally.
 
 Disable public sign-ups. The admin can invite school owners, headmasters, and teachers; the school owner can invite headmasters and teachers from **User Management**. The invitee receives an email to set up access. Add your app's `/login` URL to Supabase **Authentication > URL Configuration > Redirect URLs**. Link each teacher invitation to that teacher's staff record, and set them as the class teacher for their assigned class. Teacher access is limited to attendance and academic records for that assigned class.

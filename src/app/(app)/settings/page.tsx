@@ -13,6 +13,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { schoolSettingsSchema, type SchoolSettingsFormValues } from '@/lib/validations';
 import { dataService } from '@/lib/db';
 import { SchoolSettings } from '@/types';
+import { getErrorMessage } from '@/lib/utils';
 
 export default function SettingsPage() {
   const { addToast } = useToast();
@@ -49,7 +50,7 @@ export default function SettingsPage() {
       addToast({
         type: 'error',
         title: 'Error',
-        message: error instanceof Error ? error.message : 'Failed to save settings.',
+        message: getErrorMessage(error, 'Failed to save settings.'),
       });
     } finally {
       setIsSubmitting(false);

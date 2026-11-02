@@ -14,6 +14,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { staffSchema, type StaffFormValues } from '@/lib/validations';
 import { dataService } from '@/lib/db';
+import { getErrorMessage } from '@/lib/utils';
 import { GENDERS, STAFF_CATEGORIES, EMPLOYMENT_STATUSES, MARITAL_STATUSES, GHANA_REGIONS } from '@/lib/constants';
 
 export default function EditStaffPage() {
@@ -46,8 +47,8 @@ export default function EditStaffPage() {
       await dataService.updateStaff(staffId, data);
       addToast({ type: 'success', title: 'Updated', message: 'Staff record updated.' });
       router.push(`/staff/${staffId}`);
-    } catch {
-      addToast({ type: 'error', title: 'Error', message: 'Failed to update staff.' });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Could not update staff', message: getErrorMessage(error, 'Failed to update staff.') });
     } finally {
       setIsSubmitting(false);
     }

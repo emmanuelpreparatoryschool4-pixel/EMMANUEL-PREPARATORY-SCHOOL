@@ -16,7 +16,7 @@ import { paymentSchema, type PaymentFormValues } from '@/lib/validations';
 import { dataService } from '@/lib/db';
 import { Student, Invoice } from '@/types';
 import { PAYMENT_METHODS } from '@/lib/constants';
-import { generateReceiptNumber, parseCurrencyToPesewas, formatCurrency } from '@/lib/utils';
+import { generateReceiptNumber, parseCurrencyToPesewas, formatCurrency, getErrorMessage } from '@/lib/utils';
 
 export default function NewPaymentPage() {
   const router = useRouter();
@@ -85,8 +85,8 @@ export default function NewPaymentPage() {
 
       addToast({ type: 'success', title: 'Payment recorded', message: 'Receipt generated.' });
       router.push('/fees');
-    } catch {
-      addToast({ type: 'error', title: 'Error', message: 'Failed to record payment.' });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Could not record payment', message: getErrorMessage(error, 'Failed to record payment.') });
     } finally {
       setIsSubmitting(false);
     }

@@ -5,6 +5,29 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+export function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(error.message)) {
+    return 'Could not connect to Supabase. Check your internet connection, Supabase project status, and NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY settings. For local development, set them in .env.local and restart the dev server.';
+  }
+
+  if (error instanceof Error) {
+    const databaseError = error as Error & { code?: string; details?: string; hint?: string };
+    const code = databaseError.code;
+    if (code === '42501') {
+      return `Supabase denied this operation. Check your account role and row-level security policies. ${databaseError.message}`;
+    }
+    if (code === '42P01' || code === 'PGRST204' || code === 'PGRST205') {
+      return `The Supabase database schema may be out of date. Apply the required schema migration. ${databaseError.message}`;
+    }
+
+    return [databaseError.message, databaseError.details, databaseError.hint]
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  return fallback;
+}
+
 export function formatCurrency(amountInPesewas: number): string {
   const amount = amountInPesewas / 100;
   return new Intl.NumberFormat('en-GH', {

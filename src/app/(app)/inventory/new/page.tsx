@@ -15,7 +15,7 @@ import { inventoryItemSchema, type InventoryItemFormValues } from '@/lib/validat
 import { dataService } from '@/lib/db';
 import { Class } from '@/types';
 import { ITEM_CONDITIONS, ITEM_STATUSES } from '@/lib/constants';
-import { generateInventoryCode } from '@/lib/utils';
+import { generateInventoryCode, getErrorMessage } from '@/lib/utils';
 
 export default function NewInventoryItemPage() {
   const router = useRouter();
@@ -42,8 +42,8 @@ export default function NewInventoryItemPage() {
       });
       addToast({ type: 'success', title: 'Item added' });
       router.push('/inventory');
-    } catch {
-      addToast({ type: 'error', title: 'Error', message: 'Failed to add item.' });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Could not add item', message: getErrorMessage(error, 'Failed to add item.') });
     } finally {
       setIsSubmitting(false);
     }

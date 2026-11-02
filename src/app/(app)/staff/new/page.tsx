@@ -13,7 +13,7 @@ import { Select } from '@/components/ui/Select';
 import { useToast } from '@/contexts/ToastContext';
 import { staffSchema, type StaffFormValues } from '@/lib/validations';
 import { dataService } from '@/lib/db';
-import { generateStaffId } from '@/lib/utils';
+import { generateStaffId, getErrorMessage } from '@/lib/utils';
 import { GENDERS, STAFF_CATEGORIES, EMPLOYMENT_STATUSES, MARITAL_STATUSES, GHANA_REGIONS } from '@/lib/constants';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -45,8 +45,8 @@ export default function NewStaffPage() {
       });
       addToast({ type: 'success', title: 'Staff added', message: 'Staff member added successfully.' });
       router.push('/staff');
-    } catch {
-      addToast({ type: 'error', title: 'Error', message: 'Failed to add staff member.' });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Could not add staff member', message: getErrorMessage(error, 'Failed to add staff member.') });
     } finally {
       setIsSubmitting(false);
     }

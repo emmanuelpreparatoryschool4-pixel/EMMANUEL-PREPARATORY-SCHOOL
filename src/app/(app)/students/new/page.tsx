@@ -14,7 +14,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { studentSchema, type StudentFormValues } from '@/lib/validations';
 import { dataService } from '@/lib/db';
-import { generateStudentId, generateAdmissionNumber } from '@/lib/utils';
+import { generateStudentId, generateAdmissionNumber, getErrorMessage } from '@/lib/utils';
 import { GENDERS, GHANA_REGIONS, LANGUAGES, TRANSPORT_ARRANGEMENTS, ENROLLMENT_STATUSES } from '@/lib/constants';
 import { Class, AcademicYear } from '@/types';
 
@@ -101,8 +101,8 @@ export default function NewStudentPage() {
 
       addToast({ type: 'success', title: 'Student added', message: 'Student enrolled successfully.' });
       router.push('/students');
-    } catch {
-      addToast({ type: 'error', title: 'Error', message: 'Failed to add student.' });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Could not add student', message: getErrorMessage(error, 'Failed to add student.') });
     } finally {
       setIsSubmitting(false);
     }

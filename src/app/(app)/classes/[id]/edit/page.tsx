@@ -13,6 +13,7 @@ import { Select } from '@/components/ui/Select';
 import { useToast } from '@/contexts/ToastContext';
 import { classSchema, type ClassFormValues } from '@/lib/validations';
 import { dataService } from '@/lib/db';
+import { getErrorMessage } from '@/lib/utils';
 import { AcademicYear, Staff } from '@/types';
 
 export default function EditClassPage() {
@@ -51,8 +52,8 @@ export default function EditClassPage() {
       await dataService.updateClass(classId, data);
       addToast({ type: 'success', title: 'Updated' });
       router.push(`/classes/${classId}`);
-    } catch {
-      addToast({ type: 'error', title: 'Error', message: 'Failed to update class.' });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Could not update class', message: getErrorMessage(error, 'Failed to update class.') });
     } finally {
       setIsSubmitting(false);
     }

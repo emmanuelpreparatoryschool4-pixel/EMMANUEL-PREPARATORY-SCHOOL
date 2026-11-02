@@ -14,6 +14,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { assessmentSchema, type AssessmentFormValues } from '@/lib/validations';
 import { dataService } from '@/lib/db';
 import { Class, Subject, AcademicYear, Term, Staff, AssessmentType } from '@/types';
+import { getErrorMessage } from '@/lib/utils';
 
 export default function NewAssessmentPage() {
   const router = useRouter();
@@ -81,8 +82,8 @@ export default function NewAssessmentPage() {
       });
       addToast({ type: 'success', title: 'Assessment created' });
       router.push('/academics');
-    } catch {
-      addToast({ type: 'error', title: 'Error', message: 'Failed to create assessment.' });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Could not create assessment', message: getErrorMessage(error, 'Failed to create assessment.') });
     } finally {
       setIsSubmitting(false);
     }

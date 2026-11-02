@@ -14,7 +14,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { invoiceSchema, type InvoiceFormValues } from '@/lib/validations';
 import { dataService } from '@/lib/db';
 import { Student, FeeCategory, AcademicYear, Term } from '@/types';
-import { generateInvoiceNumber } from '@/lib/utils';
+import { generateInvoiceNumber, getErrorMessage } from '@/lib/utils';
 
 export default function NewInvoicePage() {
   const router = useRouter();
@@ -90,8 +90,8 @@ export default function NewInvoicePage() {
 
       addToast({ type: 'success', title: 'Invoice created' });
       router.push('/fees');
-    } catch {
-      addToast({ type: 'error', title: 'Error', message: 'Failed to create invoice.' });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Could not create invoice', message: getErrorMessage(error, 'Failed to create invoice.') });
     } finally {
       setIsSubmitting(false);
     }
