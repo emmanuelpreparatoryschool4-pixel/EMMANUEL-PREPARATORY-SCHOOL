@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch, type DefaultValues } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Plus, Trash2, ArrowLeft, Save } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -13,10 +13,51 @@ import { Select } from '@/components/ui/Select';
 import { useToast } from '@/contexts/ToastContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { studentSchema, type StudentFormValues } from '@/lib/validations';
-import { dataService } from '@/lib/db';
+import { dataService, seedSchoolSetup } from '@/lib/db';
 import { generateStudentId, generateAdmissionNumber, getErrorMessage } from '@/lib/utils';
 import { GENDERS, GHANA_REGIONS, TRANSPORT_ARRANGEMENTS, ENROLLMENT_STATUSES } from '@/lib/constants';
 import { Class, AcademicYear } from '@/types';
+
+const studentDraftStorageKey = 'eps-new-student-draft';
+
+const initialFormValues: DefaultValues<StudentFormValues> = {
+  languagesSpoken: ['English'],
+  enrollmentStatus: 'active',
+  transportArrangement: 'walking',
+  admissionDate: new Date().toISOString().split('T')[0],
+  guardians: [
+    {
+      fullName: '',
+      relationship: 'Parent',
+      phoneNumber: '',
+      isPrimaryContact: true,
+      isEmergencyContact: true,
+      isAuthorizedPickup: true,
+    },
+  ],
+};
+
+function isStudentDraft(value: unknown): value is Partial<StudentFormValues> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+
+  const draft = value as Record<string, unknown>;
+  return Object.entries(draft).every(([key, item]) => {
+    if (key === 'languagesSpoken') {
+      return Array.isArray(item) && item.every((language) => typeof language === 'string');
+    }
+    if (key === 'guardians') {
+      return Array.isArray(item) && item.every((guardian) => (
+        !!guardian &&
+        typeof guardian === 'object' &&
+        !Array.isArray(guardian) &&
+        Object.values(guardian).every((field) => (
+          field === undefined || typeof field === 'string' || typeof field === 'boolean'
+        ))
+      ));
+    }
+    return item === undefined || typeof item === 'string' || typeof item === 'boolean';
+  });
+}
 
 export default function NewStudentPage() {
   const router = useRouter();
@@ -27,6 +68,9 @@ export default function NewStudentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [loadError, setLoadError] = useState('');
+  const [draftError, setDraftError] = useState('');
+  const [isDraftReady, setIsDraftReady] = useState(false);
+  const restoredDraft = useRef(false);
 
   const {
     register,
@@ -34,25 +78,12 @@ export default function NewStudentPage() {
     control,
     formState: { errors },
     setValue,
+    reset,
   } = useForm<StudentFormValues>({
     resolver: zodResolver(studentSchema),
-    defaultValues: {
-      languagesSpoken: ['English'],
-      enrollmentStatus: 'active',
-      transportArrangement: 'walking',
-      admissionDate: new Date().toISOString().split('T')[0],
-      guardians: [
-        {
-          fullName: '',
-          relationship: 'Parent',
-          phoneNumber: '',
-          isPrimaryContact: true,
-          isEmergencyContact: true,
-          isAuthorizedPickup: true,
-        },
-      ],
-    },
+    defaultValues: initialFormValues,
   });
+  const formValues = useWatch({ control });
 
   const { fields: guardianFields, append: appendGuardian, remove: removeGuardian } = useFieldArray({
     control,
@@ -60,17 +91,60 @@ export default function NewStudentPage() {
   });
 
   useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      try {
+        const savedDraft = sessionStorage.getItem(studentDraftStorageKey);
+        if (savedDraft) {
+          const parsedDraft: unknown = JSON.parse(savedDraft);
+          if (!isStudentDraft(parsedDraft)) {
+            throw new Error('The saved student draft has an invalid format.');
+          }
+          restoredDraft.current = true;
+          reset({
+            ...initialFormValues,
+            ...parsedDraft,
+            guardians: parsedDraft.guardians ?? initialFormValues.guardians,
+          });
+        }
+      } catch (error) {
+        setDraftError(getErrorMessage(error, 'Could not restore the saved student draft.'));
+      } finally {
+        setIsDraftReady(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reset]);
+
+  useEffect(() => {
+    if (!isDraftReady) return;
+    try {
+      const savedDraft = JSON.stringify(formValues);
+      if (savedDraft) sessionStorage.setItem(studentDraftStorageKey, savedDraft);
+    } catch (error) {
+      const message = getErrorMessage(error, 'Could not save the student draft in this browser session.');
+      queueMicrotask(() => setDraftError(message));
+    }
+  }, [formValues, isDraftReady]);
+
+  useEffect(() => {
     async function load() {
       try {
+        await seedSchoolSetup();
         const [cls, years] = await Promise.all([
           dataService.getClasses(),
           dataService.getAcademicYears(),
         ]);
         setClasses(cls);
         setAcademicYears(years);
-        const current = years.find((y) => y.isCurrent) || years[0];
-        if (current) setValue('academicYearId', current.id);
-        if (cls[0]) setValue('currentClassId', cls[0].id);
+        if (!restoredDraft.current) {
+          const current = years.find((y) => y.isCurrent) || years[0];
+          if (current) setValue('academicYearId', current.id);
+          if (cls[0]) setValue('currentClassId', cls[0].id);
+        }
       } catch (error) {
         setLoadError(getErrorMessage(error, 'Could not load classes and academic years.'));
       }
@@ -138,6 +212,16 @@ export default function NewStudentPage() {
       }
 
       addToast({ type: 'success', title: 'Student added', message: 'Student enrolled successfully.' });
+      try {
+        sessionStorage.removeItem(studentDraftStorageKey);
+      } catch (error) {
+        console.error('Student was saved but the form draft could not be cleared.', error);
+        addToast({
+          type: 'warning',
+          title: 'Draft could not be cleared',
+          message: getErrorMessage(error, 'The student was saved, but the incomplete form draft remains in this browser session.'),
+        });
+      }
       router.push('/students');
     } catch (error) {
       const message = getErrorMessage(error, 'Failed to add student.');
@@ -170,10 +254,12 @@ export default function NewStudentPage() {
       />
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        {(loadError || submitError) && (
+        {(loadError || submitError || draftError) && (
           <div role="alert" className="break-words rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-            <p className="font-semibold">{submitError ? 'Student was not saved' : 'Could not load enrollment options'}</p>
-            <p className="mt-1">{submitError || loadError}</p>
+            <p className="font-semibold">
+              {submitError ? 'Student was not saved' : loadError ? 'Could not load enrollment options' : 'Could not save or restore the draft'}
+            </p>
+            <p className="mt-1">{submitError || loadError || draftError}</p>
           </div>
         )}
         {/* Personal Information */}
@@ -219,7 +305,8 @@ export default function NewStudentPage() {
             <Select
               label="Class"
               required
-              options={classes.map((c) => ({ value: c.id, label: c.name }))}
+              options={classes.map((c) => ({ value: c.id, label: c.stream ? `${c.name} - ${c.stream}` : c.name }))}
+              placeholder={classes.length ? 'Select class' : 'No classes available'}
               error={errors.currentClassId?.message}
               {...register('currentClassId')}
             />
