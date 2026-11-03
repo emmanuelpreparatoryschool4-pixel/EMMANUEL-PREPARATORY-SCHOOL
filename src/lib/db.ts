@@ -920,12 +920,82 @@ export const dataService = {
   async addClass(cls: Omit<Class, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     const id = generateId();
     const now = new Date().toISOString();
-    await db.classes.add({ ...cls, id, createdAt: now, updatedAt: now });
+    await db.classes.add({
+      ...cls,
+      classTeacherId: cls.classTeacherId || null,
+      id,
+      createdAt: now,
+      updatedAt: now,
+    });
     return id;
   },
 
   async updateClass(id: string, data: Partial<Class>): Promise<void> {
-    await db.classes.update(id, { ...data, updatedAt: new Date().toISOString() });
+    await db.classes.update(id, {
+      ...data,
+      ...(data.classTeacherId !== undefined ? { classTeacherId: data.classTeacherId || null } : {}),
+      updatedAt: new Date().toISOString(),
+    });
+  },
+
+  async getFeeStructures(filters?: {
+    classId?: string;
+    academicYearId?: string;
+    termId?: string;
+  }): Promise<FeeStructure[]> {
+    let feeStructures = await db.feeStructures.toArray();
+    if (filters?.classId) feeStructures = feeStructures.filter((fee) => fee.classId === filters.classId);
+    if (filters?.academicYearId) feeStructures = feeStructures.filter((fee) => fee.academicYearId === filters.academicYearId);
+    if (filters?.termId) feeStructures = feeStructures.filter((fee) => fee.termId === filters.termId);
+    return feeStructures;
+  },
+
+  async saveFeeStructure(
+    feeStructure: Omit<FeeStructure, 'id' | 'createdAt' | 'updatedAt'>
+  ): Promise<void> {
+    const [schoolClass, term] = await Promise.all([
+      this.getClass(feeStructure.classId),
+      db.terms.get(feeStructure.termId),
+    ]);
+    if (!schoolClass || schoolClass.academicYearId !== feeStructure.academicYearId) {
+      throw new Error('The selected class must belong to the selected academic year.');
+    }
+    if (!term || term.academicYearId !== feeStructure.academicYearId) {
+      throw new Error('The selected term must belong to the selected academic year.');
+    }
+    const existing = (await this.getFeeStructures({
+      classId: feeStructure.classId,
+      academicYearId: feeStructure.academicYearId,
+      termId: feeStructure.termId,
+    })).find((fee) => fee.feeCategoryId === feeStructure.feeCategoryId);
+    const now = new Date().toISOString();
+    if (existing) {
+      await db.feeStructures.update(existing.id, { ...feeStructure, updatedAt: now });
+    } else {
+      await db.feeStructures.add({
+        ...feeStructure,
+        id: generateId(),
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  },
+
+  async promoteStudents(input: {
+    studentIds: string[];
+    sourceClassId: string;
+    destinationClassId: string;
+    termId: string;
+    enrollmentDate: string;
+  }): Promise<void> {
+    const { error } = await getSupabase().rpc('promote_students', {
+      p_student_ids: input.studentIds,
+      p_source_class_id: input.sourceClassId,
+      p_destination_class_id: input.destinationClassId,
+      p_term_id: input.termId,
+      p_enrollment_date: input.enrollmentDate,
+    });
+    if (error) throw error;
   },
 
   // Subjects
@@ -971,6 +1041,29 @@ export const dataService = {
     }
 
     return students.sort((a, b) => a.lastName.localeCompare(b.lastName));
+  },
+
+  async getStudentsForClassTerm(classId: string, academicYearId: string, termId: string): Promise<Student[]> {
+    const [currentlyEnrolled, enrollmentHistory] = await Promise.all([
+      this.getStudents({ classId, academicYearId, enrollmentStatus: 'active' }),
+      db.enrollmentHistory.toArray(),
+    ]);
+    const historicalStudentIds = enrollmentHistory
+      .filter((entry) =>
+        entry.classId === classId &&
+        entry.academicYearId === academicYearId &&
+        entry.termId === termId &&
+        entry.status === 'transferred'
+      )
+      .map((entry) => entry.studentId);
+    const previousStudents = await Promise.all(
+      [...new Set(historicalStudentIds)].map((studentId) => db.students.get(studentId))
+    );
+    const studentsById = new Map(
+      [...currentlyEnrolled, ...previousStudents.filter((student): student is Student => Boolean(student))]
+        .map((student) => [student.id, student])
+    );
+    return [...studentsById.values()].sort((a, b) => a.lastName.localeCompare(b.lastName));
   },
 
   async getStudent(id: string): Promise<Student | undefined> {
@@ -1397,8 +1490,32 @@ export const dataService = {
   async addPayment(payment: Omit<Payment, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     const id = generateId();
     const now = new Date().toISOString();
-    await db.payments.add({ ...payment, id, createdAt: now, updatedAt: now });
+    await db.payments.add({
+      ...payment,
+      invoiceId: payment.invoiceId || null,
+      id,
+      createdAt: now,
+      updatedAt: now,
+    });
     return id;
+  },
+
+  async recordPayment(payment: Omit<Payment, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+    const { data, error } = await getSupabase().rpc('record_student_payment', {
+      p_receipt_number: payment.receiptNumber,
+      p_payment_reference: payment.paymentReference,
+      p_student_id: payment.studentId,
+      p_invoice_id: payment.invoiceId || null,
+      p_amount: payment.amount,
+      p_payment_date: payment.paymentDate,
+      p_payment_method: payment.paymentMethod,
+      p_transaction_reference: payment.transactionReference || null,
+      p_recorded_by: payment.recordedBy,
+      p_notes: payment.notes || null,
+    });
+    if (error) throw error;
+    if (typeof data !== 'string') throw new Error('Supabase did not confirm the payment record.');
+    return data;
   },
 
   async getFeesCollected(startDate?: string, endDate?: string): Promise<number> {

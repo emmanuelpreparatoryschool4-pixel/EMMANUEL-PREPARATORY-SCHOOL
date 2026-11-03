@@ -1,6 +1,6 @@
 # Emmanuel Preparatory School (E.P.S.) — School Management System
 
-School management application for Emmanuel Preparatory School, a basic school in Ghana. The intended app users are the school owner and headmaster; teachers and other staff remain managed records.
+School management application for Emmanuel Preparatory School, a basic school in Ghana. The app supports school administrators, owners, headmasters, and teachers, with teacher access limited to assigned academic records.
 
 ## Tech Stack
 
@@ -15,7 +15,7 @@ School management application for Emmanuel Preparatory School, a basic school in
 
 ## Supabase Setup
 
-The database schema is in [supabase/schema.sql](supabase/schema.sql). In a new Supabase project, open **SQL Editor**, paste the file contents, and run it. For an existing project, run [supabase/role_migration.sql](supabase/role_migration.sql) instead; do not rerun the full schema on an existing database. The schema creates the school tables, admin/owner/headmaster/teacher profiles, relationships, indexes, and row-level security policies. Staff banking and identity fields are isolated in an admin/owner-only table.
+The database schema is in [supabase/schema.sql](supabase/schema.sql). In a new Supabase project, open **SQL Editor**, paste the file contents, and run it. For an existing project, do not rerun the full schema. If the database predates the current profile roles, first apply [supabase/role_migration.sql](supabase/role_migration.sql), then run [supabase/upgrade.sql](supabase/upgrade.sql) once to add the academic promotion and payment functions plus teacher assessment permissions. The schema creates the school tables, admin/owner/headmaster/teacher profiles, relationships, indexes, and row-level security policies. Staff banking and identity fields are isolated in an admin/owner-only table.
 
 Create the platform admin and school owner accounts in **Authentication > Users** after running the schema. New profiles are inactive (`pending`) until a privileged admin assigns an approved role. Promote each account in the SQL Editor:
 

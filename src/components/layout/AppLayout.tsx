@@ -10,6 +10,7 @@ import { useEffect } from 'react';
 function canAccessPath(role: string | undefined, pathname: string): boolean {
   if (role !== 'teacher') return true;
   return pathname === '/academics' ||
+    pathname === '/academics/assessments/new' ||
     (pathname.startsWith('/academics/assessments/') && pathname.endsWith('/scores')) ||
     pathname === '/profile';
 }

@@ -73,7 +73,7 @@ export interface Class {
   name: string;
   stream?: string;
   academicYearId: string;
-  classTeacherId?: string;
+  classTeacherId?: string | null;
   capacity: number;
   location?: string;
   status: 'active' | 'archived';
@@ -461,7 +461,7 @@ export interface Payment {
   receiptNumber: string;
   paymentReference: string;
   studentId: string;
-  invoiceId?: string;
+  invoiceId?: string | null;
   amount: number;
   paymentDate: string;
   paymentMethod: PaymentMethod;

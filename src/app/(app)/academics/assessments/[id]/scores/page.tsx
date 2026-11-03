@@ -35,18 +35,23 @@ export default function AssessmentScoresPage() {
 					return;
 				}
 
-				const [classStudents, savedScores] = await Promise.all([
+				const [classStudents, savedScores, assessmentTypes] = await Promise.all([
 					dataService.getStudents({
 						classId: result.classId,
 						academicYearId: result.academicYearId,
 						enrollmentStatus: 'active',
 					}),
 					dataService.getAssessmentScores(id),
+					dataService.getAssessmentTypes(),
 				]);
 
 				if (cancelled) return;
 				const savedByStudent = new Map(savedScores.map((score) => [score.studentId, score.score]));
-				setAssessment(result);
+				const type = assessmentTypes.find((assessmentType) => assessmentType.id === result.assessmentTypeId);
+				setAssessment({
+					...result,
+					weight: type?.name.toLowerCase().includes('exam') ? 70 : 30,
+				});
 				setStudents(classStudents);
 				setScores(
 					Object.fromEntries(
@@ -56,8 +61,8 @@ export default function AssessmentScoresPage() {
 						})
 					)
 				);
-			} catch {
-				if (!cancelled) setLoadError('Failed to load this assessment.');
+			} catch (error) {
+				if (!cancelled) setLoadError(getErrorMessage(error, 'Failed to load this assessment.'));
 			} finally {
 				if (!cancelled) setIsLoading(false);
 			}
@@ -150,7 +155,7 @@ export default function AssessmentScoresPage() {
 						<div>
 							<CardTitle>{assessment.name}</CardTitle>
 							<p className="mt-1 text-sm text-gray-500">
-								Maximum score: {assessment.maxScore} · {enteredCount} of {students.length} scores entered
+								Maximum score: {assessment.maxScore} · This assessment contributes {assessment.weight}% to the final subject score · {enteredCount} of {students.length} scores entered
 							</p>
 						</div>
 						<Button
@@ -175,6 +180,7 @@ export default function AssessmentScoresPage() {
 											<th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Student</th>
 											<th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Admission number</th>
 											<th className="w-40 px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Score</th>
+											<th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Weighted contribution</th>
 										</tr>
 									</thead>
 									<tbody className="divide-y divide-gray-200 bg-white">
@@ -199,6 +205,11 @@ export default function AssessmentScoresPage() {
 														}
 														className="w-32 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
 													/>
+												</td>
+												<td className="px-4 py-3 text-right text-sm font-medium text-gray-700">
+													{scores[student.id]?.trim()
+														? `${((Number(scores[student.id]) / assessment.maxScore) * assessment.weight).toFixed(2)} / ${assessment.weight}`
+														: '—'}
 												</td>
 											</tr>
 										))}

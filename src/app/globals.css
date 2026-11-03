@@ -28,6 +28,11 @@
 }
 
 @media print {
+  @page {
+    size: landscape;
+    margin: 12mm;
+  }
+
   .no-print {
     display: none !important;
   }
@@ -36,5 +41,13 @@
   }
   body {
     @apply bg-white;
+  }
+  aside,
+  header {
+    display: none !important;
+  }
+  main {
+    overflow: visible !important;
+    padding: 0 !important;
   }
 }

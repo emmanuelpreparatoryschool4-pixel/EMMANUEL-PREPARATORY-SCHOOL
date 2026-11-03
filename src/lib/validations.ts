@@ -137,6 +137,15 @@ export const invoiceSchema = z.object({
   })).min(1, 'At least one fee item is required'),
   discount: z.number().min(0).optional(),
   dueDate: z.string().min(1, 'Due date is required'),
+}).superRefine((invoice, context) => {
+  const subtotal = invoice.items.reduce((sum, item) => sum + item.amount, 0);
+  if ((invoice.discount ?? 0) > subtotal) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['discount'],
+      message: 'Discount cannot exceed the invoice subtotal.',
+    });
+  }
 });
 
 export type InvoiceFormValues = z.infer<typeof invoiceSchema>;

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowLeft, Save, Plus, Trash2 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -25,16 +25,19 @@ export default function NewInvoicePage() {
   const [terms, setTerms] = useState<Term[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { register, handleSubmit, control, formState: { errors }, watch, setValue } = useForm<InvoiceFormValues>({
+  const { register, handleSubmit, control, formState: { errors }, setValue } = useForm<InvoiceFormValues>({
     resolver: zodResolver(invoiceSchema),
     defaultValues: {
       items: [{ feeCategoryId: '', description: '', amount: 0 }],
+      discount: 0,
       dueDate: new Date().toISOString().split('T')[0],
     },
   });
 
   const { fields, append, remove } = useFieldArray({ control, name: 'items' });
-  const selectedYear = watch('academicYearId');
+  const selectedYear = useWatch({ control, name: 'academicYearId' });
+  const selectedTerm = useWatch({ control, name: 'termId' });
+  const selectedStudentId = useWatch({ control, name: 'studentId' });
 
   useEffect(() => {
     async function load() {
@@ -49,12 +52,55 @@ export default function NewInvoicePage() {
       setAcademicYears(y);
       setTerms(t);
       const cy = y.find((yr) => yr.isCurrent);
-      const ct = t.find((tm) => tm.isCurrent);
+      const ct = t.find((tm) => tm.isCurrent && tm.academicYearId === cy?.id) ??
+        t.find((tm) => tm.academicYearId === cy?.id);
       if (cy) setValue('academicYearId', cy.id);
       if (ct) setValue('termId', ct.id);
     }
-    load();
-  }, [setValue]);
+    load().catch((error: unknown) => {
+      addToast({
+        type: 'error',
+        title: 'Could not load invoice options',
+        message: getErrorMessage(error, 'Failed to load students, classes, and fees.'),
+      });
+    });
+  }, [addToast, setValue]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const student = students.find((item) => item.id === selectedStudentId);
+    if (!student || !selectedYear || !selectedTerm) return () => { cancelled = true; };
+
+    dataService.getFeeStructures({
+      classId: student.currentClassId,
+      academicYearId: selectedYear,
+      termId: selectedTerm,
+    }).then((structures) => {
+      if (cancelled) return;
+      if (structures.length === 0) {
+        setValue('items', [{ feeCategoryId: '', description: '', amount: 0 }]);
+        setValue('dueDate', new Date().toISOString().split('T')[0]);
+        return;
+      }
+      const categoriesById = new Map(feeCategories.map((category) => [category.id, category]));
+      setValue('items', structures.map((fee) => ({
+        feeCategoryId: fee.feeCategoryId,
+        description: categoriesById.get(fee.feeCategoryId)?.name ?? 'Class fee',
+        amount: fee.amount / 100,
+      })));
+      setValue('dueDate', structures[0].dueDate);
+    }).catch((error: unknown) => {
+      if (!cancelled) {
+        addToast({
+          type: 'error',
+          title: 'Could not load class fees',
+          message: getErrorMessage(error, 'Failed to load the configured fee targets.'),
+        });
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, [selectedStudentId, selectedYear, selectedTerm, students, feeCategories, setValue, addToast]);
 
   const filteredTerms = terms.filter((t) => t.academicYearId === selectedYear);
 
@@ -62,6 +108,9 @@ export default function NewInvoicePage() {
     setIsSubmitting(true);
     try {
       const student = students.find((s) => s.id === data.studentId);
+      if (!student?.currentClassId) {
+        throw new Error('The selected student is not assigned to a class. Assign a class before creating an invoice.');
+      }
       const items = data.items.map((item) => ({
         id: `${Date.now()}-${Math.random()}`,
         feeCategoryId: item.feeCategoryId,
@@ -75,7 +124,7 @@ export default function NewInvoicePage() {
       await dataService.addInvoice({
         invoiceNumber: generateInvoiceNumber(),
         studentId: data.studentId,
-        classId: student?.currentClassId || '',
+        classId: student.currentClassId,
         academicYearId: data.academicYearId,
         termId: data.termId,
         items,
@@ -134,7 +183,7 @@ export default function NewInvoicePage() {
                 </div>
               </div>
             ))}
-            <Input label="Discount (GHS)" type="number" step="0.01" {...register('discount', { valueAsNumber: true })} />
+            <Input label="Discount (GHS)" type="number" min="0" step="0.01" error={errors.discount?.message} {...register('discount', { valueAsNumber: true })} />
           </CardContent>
         </Card>
 

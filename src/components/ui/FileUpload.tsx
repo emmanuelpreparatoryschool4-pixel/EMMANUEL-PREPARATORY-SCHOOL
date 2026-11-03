@@ -43,11 +43,30 @@ export function FileUpload({ accept, onFileSelect, onFileRemove, label, hint, er
           onDragLeave={() => setIsDragging(false)}
           onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
           onClick={() => inputRef.current?.click()}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              inputRef.current?.click();
+            }
+          }}
+          role="button"
+          tabIndex={0}
+          aria-label={label || 'Upload a file'}
         >
           <Upload className="h-8 w-8 text-gray-400" />
           <p className="mt-2 text-sm font-medium text-gray-700">Click to upload or drag and drop</p>
           {hint && <p className="mt-1 text-xs text-gray-500">{hint}</p>}
-          <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+          <input
+            ref={inputRef}
+            type="file"
+            accept={accept}
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleFile(file);
+              e.currentTarget.value = '';
+            }}
+          />
         </div>
       )}
       {error && <p className="mt-1 text-sm text-red-600">{error}</p>}

@@ -3,11 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Save, School, Calendar, BookOpen, DollarSign, Users, Upload } from 'lucide-react';
+import { Save, School } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { FileUpload } from '@/components/ui/FileUpload';
 import { Tabs } from '@/components/ui/Tabs';
 import { useToast } from '@/contexts/ToastContext';
 import { schoolSettingsSchema, type SchoolSettingsFormValues } from '@/lib/validations';
@@ -20,6 +21,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<SchoolSettings | null>(null);
   const [activeTab, setActiveTab] = useState('school');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [logo, setLogo] = useState<string | undefined>();
 
   const { register, handleSubmit, formState: { errors }, reset } = useForm<SchoolSettingsFormValues>({
     resolver: zodResolver(schoolSettingsSchema),
@@ -30,6 +32,7 @@ export default function SettingsPage() {
       const s = await dataService.getSchoolSettings();
       if (s) {
         setSettings(s);
+        setLogo(s.logo || '');
         reset({
           name: s.name, abbreviation: s.abbreviation, address: s.address,
           digitalAddress: s.digitalAddress, phoneNumbers: s.phoneNumbers,
@@ -44,8 +47,9 @@ export default function SettingsPage() {
   const onSubmit = async (data: SchoolSettingsFormValues) => {
     setIsSubmitting(true);
     try {
-      await dataService.updateSchoolSettings(data);
+      await dataService.updateSchoolSettings({ ...data, logo: logo ?? settings?.logo });
       addToast({ type: 'success', title: 'Settings saved' });
+      setSettings((current) => current ? { ...current, ...data, logo: logo ?? current.logo } : current);
     } catch (error) {
       addToast({
         type: 'error',
@@ -55,6 +59,30 @@ export default function SettingsPage() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleLogoSelect = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      addToast({ type: 'error', title: 'Unsupported file', message: 'Choose a PNG, JPG, or other image file.' });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      addToast({ type: 'error', title: 'Image is too large', message: 'Choose a school logo smaller than 2 MB.' });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== 'string' || !reader.result.startsWith('data:image/')) {
+        addToast({ type: 'error', title: 'Could not read image', message: 'Choose a valid image file and try again.' });
+        return;
+      }
+      setLogo(reader.result);
+    };
+    reader.onerror = () => {
+      addToast({ type: 'error', title: 'Could not read image', message: 'The selected logo could not be read.' });
+    };
+    reader.readAsDataURL(file);
   };
 
   const tabs = [
@@ -93,11 +121,29 @@ export default function SettingsPage() {
             <CardContent>
               <div className="flex items-center gap-6">
                 <div className="flex h-24 w-24 items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50">
-                  <School className="h-10 w-10 text-gray-300" />
+                  {logo ? (
+                    <div
+                      role="img"
+                      aria-label="School logo preview"
+                      className="h-full w-full rounded-lg bg-contain bg-center bg-no-repeat"
+                      style={{ backgroundImage: `url("${logo}")` }}
+                    />
+                  ) : (
+                    <School className="h-10 w-10 text-gray-300" />
+                  )}
                 </div>
-                <div>
-                  <Button type="button" variant="outline" leftIcon={<Upload className="h-4 w-4" />}>Upload Logo</Button>
-                  <p className="mt-2 text-xs text-gray-500">PNG or JPG, recommended 512x512px</p>
+                <div className="flex-1">
+                  <FileUpload
+                    accept="image/*"
+                    onFileSelect={handleLogoSelect}
+                    label="Upload Logo"
+                    hint="PNG or JPG, up to 2 MB"
+                  />
+                  {logo && (
+                    <Button type="button" variant="ghost" size="sm" className="mt-2" onClick={() => setLogo('')}>
+                      Remove logo
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardContent>
