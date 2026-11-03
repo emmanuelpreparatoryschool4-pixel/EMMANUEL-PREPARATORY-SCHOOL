@@ -7,7 +7,6 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/contexts/ToastContext';
-import { useAuth } from '@/contexts/AuthContext';
 import { dataService } from '@/lib/db';
 import { Assessment, Student } from '@/types';
 import { getErrorMessage } from '@/lib/utils';
@@ -16,7 +15,6 @@ export default function AssessmentScoresPage() {
 	const { id } = useParams<{ id: string }>();
 	const router = useRouter();
 	const { addToast } = useToast();
-	const { user } = useAuth();
 	const [assessment, setAssessment] = useState<Assessment | null>(null);
 	const [students, setStudents] = useState<Student[]>([]);
 	const [scores, setScores] = useState<Record<string, string>>({});
@@ -36,11 +34,7 @@ export default function AssessmentScoresPage() {
 				}
 
 				const [classStudents, savedScores, assessmentTypes] = await Promise.all([
-					dataService.getStudents({
-						classId: result.classId,
-						academicYearId: result.academicYearId,
-						enrollmentStatus: 'active',
-					}),
+					dataService.getStudentsForClassTerm(result.classId, result.academicYearId, result.termId),
 					dataService.getAssessmentScores(id),
 					dataService.getAssessmentTypes(),
 				]);
@@ -86,7 +80,7 @@ export default function AssessmentScoresPage() {
 			}
 
 			const score = Number(value);
-			if (!Number.isFinite(score) || score < 0 || score > assessment.maxScore) {
+			if (!Number.isFinite(score) || score < 0 || score > assessment.maxScore || score > 100) {
 				addToast({
 					type: 'error',
 					title: 'Check the scores',
@@ -99,7 +93,7 @@ export default function AssessmentScoresPage() {
 
 		setIsSaving(true);
 		try {
-			await dataService.saveAssessmentScores(id, entries, user?.role !== 'teacher');
+			await dataService.saveAssessmentScores(id, entries);
 			const savedScores = await dataService.getAssessmentScores(id);
 			setAssessment((current) =>
 				current

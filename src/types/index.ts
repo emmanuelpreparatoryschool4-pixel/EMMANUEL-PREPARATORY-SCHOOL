@@ -2,7 +2,7 @@
 // USER & AUTH TYPES
 // ============================================
 
-export type UserRole = 'admin' | 'owner' | 'headmaster' | 'teacher';
+export type UserRole = 'admin' | 'owner' | 'headmaster';
 
 export interface User {
   id: string;
@@ -10,7 +10,6 @@ export interface User {
   name: string;
   role: UserRole;
   avatar?: string;
-  staffId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -30,6 +29,7 @@ export interface SchoolSettings {
   name: string;
   abbreviation: string;
   logo?: string;
+  profileImage?: string;
   address: string;
   digitalAddress: string;
   phoneNumbers: string[];
@@ -74,6 +74,7 @@ export interface Class {
   stream?: string;
   academicYearId: string;
   classTeacherId?: string | null;
+  subjectIds?: string[];
   capacity: number;
   location?: string;
   status: 'active' | 'archived';
@@ -176,6 +177,7 @@ export interface EnrollmentHistory {
   exitDate?: string;
   status: EnrollmentStatus;
   notes?: string;
+  recordedBy?: string;
   createdAt: string;
 }
 
@@ -348,7 +350,7 @@ export interface Assessment {
   subjectId: string;
   termId: string;
   academicYearId: string;
-  teacherId: string;
+  teacherId?: string | null;
   maxScore: number;
   weight: number;
   date: string;
@@ -385,7 +387,7 @@ export interface ReportCard {
   teacherComment?: string;
   headteacherComment?: string;
   promotionDecision?: string;
-  status: 'draft' | 'published';
+  status: 'draft' | 'ready_for_review' | 'published';
   createdAt: string;
   updatedAt: string;
 }

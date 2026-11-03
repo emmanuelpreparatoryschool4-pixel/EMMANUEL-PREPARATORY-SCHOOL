@@ -13,7 +13,7 @@ interface AuthContextType extends AuthState {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function isUserRole(role: string): role is UserRole {
-  return role === 'admin' || role === 'owner' || role === 'headmaster' || role === 'teacher';
+  return role === 'admin' || role === 'owner' || role === 'headmaster';
 }
 
 async function getProfileUser(userId: string): Promise<User | null> {
@@ -21,7 +21,7 @@ async function getProfileUser(userId: string): Promise<User | null> {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, email, full_name, role, avatar_url, staff_id, created_at, updated_at')
+    .select('id, email, full_name, role, avatar_url, created_at, updated_at')
     .eq('id', userId)
     .maybeSingle();
 
@@ -33,7 +33,6 @@ async function getProfileUser(userId: string): Promise<User | null> {
     name: data.full_name,
     role: data.role,
     avatar: data.avatar_url ?? undefined,
-    staffId: data.staff_id ?? undefined,
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   };

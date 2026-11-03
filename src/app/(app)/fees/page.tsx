@@ -34,19 +34,20 @@ export default function FeesPage() {
     dueDate: new Date().toISOString().split('T')[0],
   });
   const [isSavingFeeTarget, setIsSavingFeeTarget] = useState(false);
-  const [collected, setCollected] = useState(0);
-  const [outstanding, setOutstanding] = useState(0);
   const [activeTab, setActiveTab] = useState('overview');
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedYearId, setSelectedYearId] = useState('');
+  const [selectedTermId, setSelectedTermId] = useState('');
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   useEffect(() => {
     async function load() {
       try {
-        const [inv, pay, col, out] = await Promise.all([
+        const [inv, pay] = await Promise.all([
           dataService.getInvoices(),
           dataService.getPayments(),
-          dataService.getFeesCollected(),
-          dataService.getOutstandingBalances(),
         ]);
         const [allStudents, allClasses, years, allTerms, categories, structures] = await Promise.all([
           dataService.getStudents(),
@@ -73,8 +74,7 @@ export default function FeesPage() {
             allTerms.find((term) => term.academicYearId === currentYearId)?.id ?? '',
           feeCategoryId: categories.find((category) => category.status === 'active')?.id ?? '',
         }));
-        setCollected(col);
-        setOutstanding(out);
+        setSelectedYearId(currentYearId);
       } catch (error) {
         addToast({
           type: 'error',
@@ -98,23 +98,71 @@ export default function FeesPage() {
 
   if (isLoading) return <div className="h-64 animate-pulse rounded-xl bg-gray-200" />;
 
-  const collectionRate = collected + outstanding > 0 ? Math.round((collected / (collected + outstanding)) * 100) : 0;
   const studentMap = new Map(students.map((student) => [student.id, student]));
   const classMap = new Map(classes.map((schoolClass) => [schoolClass.id, schoolClass]));
   const yearMap = new Map(academicYears.map((year) => [year.id, year]));
   const termMap = new Map(terms.map((term) => [term.id, term]));
   const feeCategoryMap = new Map(feeCategories.map((category) => [category.id, category]));
+  const invoiceMatches = (invoice: Invoice) => (
+    (!selectedYearId || invoice.academicYearId === selectedYearId) &&
+    (!selectedTermId || invoice.termId === selectedTermId) &&
+    (!selectedClassId || invoice.classId === selectedClassId)
+  );
+  const filteredInvoices = invoices.filter(invoiceMatches);
+  const invoiceMap = new Map(invoices.map((invoice) => [invoice.id, invoice]));
+  const hasAcademicFilters = Boolean(selectedYearId || selectedTermId || selectedClassId);
+  const academicPayments = payments.filter((payment) => {
+    if (!payment.invoiceId) return !hasAcademicFilters;
+    const invoice = invoiceMap.get(payment.invoiceId);
+    return Boolean(invoice && invoiceMatches(invoice));
+  });
+  const filteredPayments = academicPayments.filter((payment) =>
+    (!startDate || payment.paymentDate >= startDate) &&
+    (!endDate || payment.paymentDate <= endDate)
+  );
+  const collected = filteredPayments
+    .filter((payment) => payment.status === 'completed')
+    .reduce((sum, payment) => sum + payment.amount, 0);
+  const expected = filteredInvoices
+    .filter((invoice) => invoice.status !== 'cancelled')
+    .reduce((sum, invoice) => sum + invoice.totalAmount, 0);
+  const outstanding = filteredInvoices
+    .filter((invoice) => invoice.status !== 'cancelled')
+    .reduce((sum, invoice) => sum + invoice.outstandingBalance, 0);
+  const collectionRate = expected > 0 ? Math.round((collected / expected) * 100) : 0;
   const studentAccountMap = new Map(students.map((student) => {
-    const target = invoices
-      .filter((invoice) => invoice.studentId === student.id && invoice.status !== 'cancelled')
-      .reduce((sum, invoice) => sum + invoice.totalAmount, 0);
-    const paid = payments
+    const studentInvoices = filteredInvoices.filter((invoice) => invoice.studentId === student.id && invoice.status !== 'cancelled');
+    const target = studentInvoices.reduce((sum, invoice) => sum + invoice.totalAmount, 0);
+    const paid = academicPayments
       .filter((payment) => payment.studentId === student.id && payment.status === 'completed')
       .reduce((sum, payment) => sum + payment.amount, 0);
     return [student.id, { target, paid, balance: Math.max(0, target - paid) }] as const;
   }));
+  const periodStudents = new Set(filteredInvoices.map((invoice) => invoice.studentId));
+  const fullyPaidCount = [...periodStudents].filter((studentId) => studentAccountMap.get(studentId)?.balance === 0).length;
+  const partlyPaidCount = [...periodStudents].filter((studentId) => {
+    const account = studentAccountMap.get(studentId);
+    return Boolean(account && account.paid > 0 && account.balance > 0);
+  }).length;
+  const unpaidCount = [...periodStudents].filter((studentId) => studentAccountMap.get(studentId)?.paid === 0).length;
+  const today = new Date().toISOString().slice(0, 10);
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const receivedToday = academicPayments.filter((payment) => payment.paymentDate === today && payment.status === 'completed').reduce((sum, payment) => sum + payment.amount, 0);
+  const receivedThisMonth = academicPayments.filter((payment) => payment.paymentDate >= monthStart && payment.status === 'completed').reduce((sum, payment) => sum + payment.amount, 0);
+  const collectionTrend = Array.from({ length: 6 }, (_, index) => {
+    const monthDate = new Date();
+    monthDate.setDate(1);
+    monthDate.setMonth(monthDate.getMonth() - (5 - index));
+    const key = monthDate.toISOString().slice(0, 7);
+    return {
+      label: monthDate.toLocaleDateString(undefined, { month: 'short' }),
+      amount: filteredPayments.filter((payment) => payment.paymentDate.startsWith(key) && payment.status === 'completed')
+        .reduce((sum, payment) => sum + payment.amount, 0),
+    };
+  });
   const isFeeManager = user?.role === 'admin' || user?.role === 'owner';
   const filteredFeeTerms = terms.filter((term) => term.academicYearId === feeTarget.academicYearId);
+  const selectedAcademicTerms = terms.filter((term) => term.academicYearId === selectedYearId);
 
   const saveFeeTarget = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -164,7 +212,65 @@ export default function FeesPage() {
           </>
         } />
 
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <Card className="mb-6 p-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <label className="text-sm font-medium text-gray-700">
+            Academic year
+            <select
+              value={selectedYearId}
+              onChange={(event) => {
+                const yearId = event.target.value;
+                setSelectedYearId(yearId);
+                setSelectedTermId('');
+                setSelectedClassId('');
+              }}
+              className="mt-1 block min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm"
+            >
+              <option value="">All academic years</option>
+              {academicYears.map((year) => <option key={year.id} value={year.id}>{year.name}</option>)}
+            </select>
+          </label>
+          <label className="text-sm font-medium text-gray-700">
+            Term
+            <select
+              value={selectedTermId}
+              onChange={(event) => setSelectedTermId(event.target.value)}
+              className="mt-1 block min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm"
+            >
+              <option value="">All terms</option>
+              {selectedAcademicTerms.map((term) => <option key={term.id} value={term.id}>{term.name}</option>)}
+            </select>
+          </label>
+          <label className="text-sm font-medium text-gray-700">
+            Class
+            <select
+              value={selectedClassId}
+              onChange={(event) => setSelectedClassId(event.target.value)}
+              className="mt-1 block min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm"
+            >
+              <option value="">All classes</option>
+              {classes.filter((schoolClass) => !selectedYearId || schoolClass.academicYearId === selectedYearId)
+                .map((schoolClass) => <option key={schoolClass.id} value={schoolClass.id}>{schoolClass.name}</option>)}
+            </select>
+          </label>
+          <label className="text-sm font-medium text-gray-700">
+            Payments from
+            <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="mt-1 block min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm" />
+          </label>
+          <label className="text-sm font-medium text-gray-700">
+            Payments to
+            <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="mt-1 block min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm" />
+          </label>
+        </div>
+      </Card>
+
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Card className="p-5">
+          <div className="flex items-center justify-between">
+            <div><p className="text-sm text-gray-500">Expected Fees</p><p className="mt-1 text-2xl font-bold text-gray-900">{formatCurrencyCompact(expected)}</p></div>
+            <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-blue-100 text-blue-600"><FileText className="h-5 w-5" /></div>
+          </div>
+        </Card>
         <Card className="p-5">
           <div className="flex items-center justify-between">
             <div><p className="text-sm text-gray-500">Fees Collected</p><p className="mt-1 text-2xl font-bold text-green-600">{formatCurrencyCompact(collected)}</p></div>
@@ -183,19 +289,47 @@ export default function FeesPage() {
             <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary-100 text-primary-600"><Receipt className="h-5 w-5" /></div>
           </div>
         </Card>
+        <Card className="p-5">
+          <p className="text-sm text-gray-500">Paid / partial / unpaid</p>
+          <p className="mt-1 text-xl font-bold text-gray-900">{fullyPaidCount} / {partlyPaidCount} / {unpaidCount}</p>
+        </Card>
+        <Card className="p-5">
+          <p className="text-sm text-gray-500">Received today / this month</p>
+          <p className="mt-1 text-sm font-bold text-gray-900">{formatCurrencyCompact(receivedToday)} / {formatCurrencyCompact(receivedThisMonth)}</p>
+        </Card>
       </div>
 
       <Tabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} className="mb-6" />
 
       {activeTab === 'overview' && (
-        <Card><CardContent><p className="py-8 text-center text-sm text-gray-500">Select a tab to view detailed financial records.</p></CardContent></Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Collection trend</CardTitle>
+            <p className="text-sm text-gray-500">Payments recorded in the most recent six months</p>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+              {collectionTrend.map((month) => {
+                const maximum = Math.max(1, ...collectionTrend.map((item) => item.amount));
+                const height = Math.max(6, Math.round((month.amount / maximum) * 100));
+                return (
+                  <div key={month.label} className="flex min-h-36 flex-col justify-end rounded-lg bg-gray-50 p-3">
+                    <p className="mb-2 text-center text-xs font-medium text-gray-700">{formatCurrencyCompact(month.amount)}</p>
+                    <div className="mx-auto w-8 rounded-t bg-primary-500" style={{ height: `${height}px` }} />
+                    <p className="mt-2 text-center text-xs text-gray-500">{month.label}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {activeTab === 'invoices' && (
         <Card>
           <CardHeader><CardTitle>Invoices</CardTitle></CardHeader>
           <CardContent>
-            {invoices.length === 0 ? (
+            {filteredInvoices.length === 0 ? (
               <p className="py-8 text-center text-sm text-gray-500">No invoices created yet.</p>
             ) : (
               <div className="overflow-x-auto">
@@ -209,7 +343,7 @@ export default function FeesPage() {
                     <th className="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Status</th>
                   </tr></thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
-                    {invoices.map((invoice) => {
+                    {filteredInvoices.map((invoice) => {
                       const student = studentMap.get(invoice.studentId);
                       const schoolClass = classMap.get(invoice.classId);
                       return (
@@ -238,7 +372,7 @@ export default function FeesPage() {
         <Card>
           <CardHeader><CardTitle>Payments</CardTitle></CardHeader>
           <CardContent>
-            {payments.length === 0 ? (
+            {filteredPayments.length === 0 ? (
               <p className="py-8 text-center text-sm text-gray-500">No payments recorded yet.</p>
             ) : (
               <div className="overflow-x-auto">
@@ -253,7 +387,7 @@ export default function FeesPage() {
                     <th className="px-3 py-3 text-right text-xs font-medium uppercase text-gray-500">This payment</th>
                   </tr></thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
-                    {payments.map((payment) => {
+                    {filteredPayments.map((payment) => {
                       const student = studentMap.get(payment.studentId);
                       const invoice = invoices.find((item) => item.id === payment.invoiceId);
                       const account = studentAccountMap.get(payment.studentId);
@@ -284,9 +418,42 @@ export default function FeesPage() {
         <Card>
           <CardHeader><CardTitle>Outstanding Debt</CardTitle></CardHeader>
           <CardContent>
-            <p className="py-8 text-center text-sm text-gray-500">
-              Students with outstanding balances: {invoices.filter((i) => i.outstandingBalance > 0).length}
-            </p>
+            {filteredInvoices.filter((invoice) => invoice.outstandingBalance > 0 && invoice.status !== 'cancelled').length === 0 ? (
+              <p className="py-8 text-center text-sm text-gray-500">No outstanding balances match these filters.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50"><tr>
+                    <th className="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Student</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Academic period / class</th>
+                    <th className="px-3 py-3 text-right text-xs font-medium uppercase text-gray-500">Expected</th>
+                    <th className="px-3 py-3 text-right text-xs font-medium uppercase text-gray-500">Paid</th>
+                    <th className="px-3 py-3 text-right text-xs font-medium uppercase text-gray-500">Balance</th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredInvoices.filter((invoice) => invoice.outstandingBalance > 0 && invoice.status !== 'cancelled').map((invoice) => {
+                      const student = studentMap.get(invoice.studentId);
+                      return (
+                        <tr key={invoice.id}>
+                          <td className="px-3 py-3 text-sm">
+                            <a className="font-medium text-primary-700 hover:underline" href={`/students/${invoice.studentId}`}>
+                              {student ? `${student.firstName} ${student.lastName}` : 'Unknown student'}
+                            </a>
+                            <p className="text-xs text-gray-500">{student?.admissionNumber}</p>
+                          </td>
+                          <td className="px-3 py-3 text-sm text-gray-600">
+                            {yearMap.get(invoice.academicYearId)?.name} · {termMap.get(invoice.termId)?.name} · {classMap.get(invoice.classId)?.name}
+                          </td>
+                          <td className="px-3 py-3 text-right text-sm">{formatCurrency(invoice.totalAmount)}</td>
+                          <td className="px-3 py-3 text-right text-sm text-green-700">{formatCurrency(invoice.amountPaid)}</td>
+                          <td className="px-3 py-3 text-right text-sm font-semibold text-red-700">{formatCurrency(invoice.outstandingBalance)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

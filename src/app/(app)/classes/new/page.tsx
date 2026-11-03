@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowLeft, Save } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -14,25 +14,29 @@ import { useToast } from '@/contexts/ToastContext';
 import { classSchema, type ClassFormValues } from '@/lib/validations';
 import { dataService } from '@/lib/db';
 import { getErrorMessage } from '@/lib/utils';
-import { AcademicYear, Staff } from '@/types';
+import { AcademicYear, Subject } from '@/types';
 
 export default function NewClassPage() {
   const router = useRouter();
   const { addToast } = useToast();
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
-  const [teachers, setTeachers] = useState<Staff[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { register, handleSubmit, formState: { errors }, setValue } = useForm<ClassFormValues>({
+  const { register, handleSubmit, formState: { errors }, setValue, control } = useForm<ClassFormValues>({
     resolver: zodResolver(classSchema),
-    defaultValues: { capacity: 40 },
+    defaultValues: { capacity: 40, subjectIds: [] },
   });
+  const selectedSubjectIds = useWatch({ control, name: 'subjectIds' }) ?? [];
 
   useEffect(() => {
     async function load() {
-      const [years, staff] = await Promise.all([dataService.getAcademicYears(), dataService.getStaff({ category: 'teacher' })]);
+      const [years, availableSubjects] = await Promise.all([
+        dataService.getAcademicYears(),
+        dataService.getSubjects(),
+      ]);
       setAcademicYears(years);
-      setTeachers(staff);
+      setSubjects(availableSubjects);
       const current = years.find((y) => y.isCurrent);
       if (current) setValue('academicYearId', current.id);
     }
@@ -64,9 +68,33 @@ export default function NewClassPage() {
             <Input label="Class Name" required error={errors.name?.message} {...register('name')} placeholder="e.g. Primary 1" />
             <Input label="Stream" {...register('stream')} placeholder="e.g. A" />
             <Select label="Academic Year" required options={academicYears.map((y) => ({ value: y.id, label: y.name }))} error={errors.academicYearId?.message} {...register('academicYearId')} />
-            <Select label="Class Teacher" options={[{ value: '', label: 'Unassigned' }, ...teachers.map((t) => ({ value: t.id, label: `${t.firstName} ${t.lastName}` }))]} {...register('classTeacherId')} />
             <Input label="Capacity" type="number" required error={errors.capacity?.message} {...register('capacity', { valueAsNumber: true })} />
             <Input label="Location" {...register('location')} placeholder="e.g. Block A, Room 3" />
+            <fieldset className="md:col-span-2">
+              <legend className="mb-2 text-sm font-medium text-gray-700">Subjects offered in this class</legend>
+              {subjects.length === 0 ? (
+                <p className="text-sm text-gray-500">Create subjects in Academics before assigning them to a class.</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {subjects.map((subject) => (
+                    <label key={subject.id} className="flex min-h-11 items-center gap-2 rounded-lg border border-gray-200 px-3 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selectedSubjectIds.includes(subject.id)}
+                        onChange={(event) => setValue(
+                          'subjectIds',
+                          event.target.checked
+                            ? [...selectedSubjectIds, subject.id]
+                            : selectedSubjectIds.filter((subjectId) => subjectId !== subject.id),
+                          { shouldDirty: true }
+                        )}
+                      />
+                      {subject.name}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </fieldset>
             <Input label="Notes" className="md:col-span-2" {...register('notes')} />
           </CardContent>
         </Card>

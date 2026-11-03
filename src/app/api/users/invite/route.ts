@@ -5,8 +5,7 @@ import { z } from 'zod';
 const inviteSchema = z.object({
   email: z.string().trim().email().transform((email) => email.toLowerCase()),
   fullName: z.string().trim().min(2).max(120),
-  role: z.enum(['owner', 'headmaster', 'teacher']),
-  staffId: z.string().trim().optional(),
+  role: z.enum(['owner', 'headmaster']),
 });
 
 export async function POST(request: Request) {
@@ -59,31 +58,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Only the platform admin can create another school owner.' }, { status: 403 });
     }
 
-    if (parsed.data.role === 'teacher' && !parsed.data.staffId) {
-      return NextResponse.json({ error: 'Select the staff record linked to this teacher account.' }, { status: 400 });
-    }
-    if (parsed.data.staffId) {
-      const { data: staff, error: staffError } = await supabase
-        .from('staff')
-        .select('id, staff_category')
-        .eq('id', parsed.data.staffId)
-        .maybeSingle();
-      if (staffError) throw staffError;
-      if (!staff || (parsed.data.role === 'teacher' && !['teacher', 'headteacher'].includes(staff.staff_category))) {
-        return NextResponse.json({ error: 'Select a valid teacher staff record.' }, { status: 400 });
-      }
-
-      const { data: linkedProfile, error: linkedProfileError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('staff_id', parsed.data.staffId)
-        .maybeSingle();
-      if (linkedProfileError) throw linkedProfileError;
-      if (linkedProfile) {
-        return NextResponse.json({ error: 'That staff record is already linked to an account.' }, { status: 409 });
-      }
-    }
-
     const redirectTo = new URL('/login', request.url).toString();
     const { data: inviteData, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(
       parsed.data.email,
@@ -101,7 +75,6 @@ export async function POST(request: Request) {
       .update({
         full_name: parsed.data.fullName,
         role: parsed.data.role,
-        staff_id: parsed.data.staffId || null,
       })
       .eq('id', inviteData.user.id)
       .select('id')

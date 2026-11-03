@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Users, School, BarChart3, BookOpen,
-  DollarSign, Package, FileText, Settings, UserCog, History, User, X, ChevronLeft, Download,
+  DollarSign, Package, FileText, Settings, History, X, ChevronLeft, Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,14 +24,12 @@ const navItems = [
   { label: 'Students', href: '/students', icon: Users, roles: ['admin', 'owner', 'headmaster'] },
   { label: 'Classes & Enrollment', href: '/classes', icon: School, roles: ['admin', 'owner', 'headmaster'] },
   { label: 'School Statistics', href: '/statistics', icon: BarChart3, roles: ['admin', 'owner', 'headmaster'] },
-  { label: 'Academics & Results', href: '/academics', icon: BookOpen, roles: ['admin', 'owner', 'headmaster', 'teacher'] },
+  { label: 'Academics & Results', href: '/academics', icon: BookOpen, roles: ['admin', 'owner', 'headmaster'] },
   { label: 'Fees & Payments', href: '/fees', icon: DollarSign, roles: ['admin', 'owner', 'headmaster'] },
   { label: 'Inventory', href: '/inventory', icon: Package, roles: ['admin', 'owner', 'headmaster'] },
   { label: 'Reports', href: '/reports', icon: FileText, roles: ['admin', 'owner', 'headmaster'] },
-  { label: 'School Settings', href: '/settings', icon: Settings, roles: ['admin', 'owner'] },
-  { label: 'User Management', href: '/users', icon: UserCog, roles: ['admin', 'owner'] },
+  { label: 'Settings', href: '/settings', icon: Settings, roles: ['admin', 'owner'] },
   { label: 'Activity History', href: '/activity', icon: History, roles: ['admin', 'owner', 'headmaster'] },
-  { label: 'My Profile', href: '/profile', icon: User, roles: ['admin', 'owner', 'headmaster', 'teacher'] },
 ];
 
 export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: SidebarProps) {
@@ -140,25 +138,26 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
                 </li>
               );
             })}
+            {!isInstalled && (
+              <li>
+                <button
+                  onClick={() => void handleInstall()}
+                  className={cn(
+                    'flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-gray-400 transition-colors hover:bg-gray-800 hover:text-white',
+                    collapsed && !isOpen && 'justify-center px-2'
+                  )}
+                  title={collapsed && !isOpen ? 'Install App' : undefined}
+                >
+                  <Download className="h-5 w-5 flex-shrink-0" />
+                  {(!collapsed || isOpen) && <span>Install App</span>}
+                </button>
+              </li>
+            )}
           </ul>
         </nav>
 
         {/* Collapse toggle */}
         <div className="border-t border-gray-800 p-3">
-          {!isInstalled && (
-            <button
-              onClick={() => void handleInstall()}
-              className={cn(
-                'mb-2 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-300',
-                'hover:bg-gray-800 hover:text-white',
-                collapsed && !isOpen && 'justify-center px-2'
-              )}
-              title={collapsed && !isOpen ? 'Install app' : undefined}
-            >
-              <Download className="h-5 w-5 flex-shrink-0" />
-              {(!collapsed || isOpen) && <span>Install App</span>}
-            </button>
-          )}
           <button
             onClick={onToggleCollapse}
             className={cn(

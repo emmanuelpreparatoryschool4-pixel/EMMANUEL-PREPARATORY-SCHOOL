@@ -103,7 +103,7 @@ export const classSchema = z.object({
   name: z.string().min(1, 'Class name is required'),
   stream: z.string().optional(),
   academicYearId: z.string().min(1, 'Academic year is required'),
-  classTeacherId: z.string().optional(),
+  subjectIds: z.array(z.string()).default([]),
   capacity: z.number().min(1, 'Capacity must be at least 1'),
   location: z.string().optional(),
   notes: z.string().optional(),
@@ -118,8 +118,7 @@ export const assessmentSchema = z.object({
   subjectId: z.string().min(1, 'Subject is required'),
   termId: z.string().min(1, 'Term is required'),
   academicYearId: z.string().min(1, 'Academic year is required'),
-  teacherId: z.string().min(1, 'Teacher is required'),
-  maxScore: z.number().min(1, 'Maximum score must be at least 1'),
+  maxScore: z.number().min(1, 'Maximum score must be at least 1').max(100, 'Maximum score cannot exceed 100'),
   weight: z.number().min(1).max(100, 'Weight must be between 1 and 100'),
   date: z.string().min(1, 'Date is required'),
 });

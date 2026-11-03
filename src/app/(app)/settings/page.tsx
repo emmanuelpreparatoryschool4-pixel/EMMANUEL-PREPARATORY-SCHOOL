@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { FileUpload } from '@/components/ui/FileUpload';
 import { Tabs } from '@/components/ui/Tabs';
+import { UserManagementPanel } from '@/components/settings/UserManagementPanel';
+import { MyProfilePanel } from '@/components/settings/MyProfilePanel';
 import { useToast } from '@/contexts/ToastContext';
 import { schoolSettingsSchema, type SchoolSettingsFormValues } from '@/lib/validations';
 import { dataService } from '@/lib/db';
@@ -22,6 +24,7 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('school');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [logo, setLogo] = useState<string | undefined>();
+  const [profileImage, setProfileImage] = useState<string | undefined>();
 
   const { register, handleSubmit, formState: { errors }, reset } = useForm<SchoolSettingsFormValues>({
     resolver: zodResolver(schoolSettingsSchema),
@@ -33,6 +36,7 @@ export default function SettingsPage() {
       if (s) {
         setSettings(s);
         setLogo(s.logo || '');
+        setProfileImage(s.profileImage || '');
         reset({
           name: s.name, abbreviation: s.abbreviation, address: s.address,
           digitalAddress: s.digitalAddress, phoneNumbers: s.phoneNumbers,
@@ -47,9 +51,18 @@ export default function SettingsPage() {
   const onSubmit = async (data: SchoolSettingsFormValues) => {
     setIsSubmitting(true);
     try {
-      await dataService.updateSchoolSettings({ ...data, logo: logo ?? settings?.logo });
+      await dataService.updateSchoolSettings({
+        ...data,
+        logo: logo ?? settings?.logo,
+        profileImage: profileImage ?? settings?.profileImage,
+      });
       addToast({ type: 'success', title: 'Settings saved' });
-      setSettings((current) => current ? { ...current, ...data, logo: logo ?? current.logo } : current);
+      setSettings((current) => current ? {
+        ...current,
+        ...data,
+        logo: logo ?? current.logo,
+        profileImage: profileImage ?? current.profileImage,
+      } : current);
     } catch (error) {
       addToast({
         type: 'error',
@@ -61,13 +74,17 @@ export default function SettingsPage() {
     }
   };
 
-  const handleLogoSelect = (file: File) => {
+  const handleImageSelect = (
+    file: File,
+    setImage: React.Dispatch<React.SetStateAction<string | undefined>>,
+    label: string
+  ) => {
     if (!file.type.startsWith('image/')) {
-      addToast({ type: 'error', title: 'Unsupported file', message: 'Choose a PNG, JPG, or other image file.' });
+      addToast({ type: 'error', title: 'Unsupported file', message: `Choose a PNG, JPG, or other image for the ${label}.` });
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
-      addToast({ type: 'error', title: 'Image is too large', message: 'Choose a school logo smaller than 2 MB.' });
+      addToast({ type: 'error', title: 'Image is too large', message: `Choose a ${label} image smaller than 2 MB.` });
       return;
     }
 
@@ -77,7 +94,7 @@ export default function SettingsPage() {
         addToast({ type: 'error', title: 'Could not read image', message: 'Choose a valid image file and try again.' });
         return;
       }
-      setLogo(reader.result);
+      setImage(reader.result);
     };
     reader.onerror = () => {
       addToast({ type: 'error', title: 'Could not read image', message: 'The selected logo could not be read.' });
@@ -86,15 +103,14 @@ export default function SettingsPage() {
   };
 
   const tabs = [
-    { id: 'school', label: 'School Info' },
-    { id: 'academic', label: 'Academic' },
-    { id: 'classes', label: 'Classes' },
-    { id: 'fees', label: 'Fee Categories' },
+    { id: 'school', label: 'School Information' },
+    { id: 'users', label: 'User Management' },
+    { id: 'profile', label: 'My Profile' },
   ];
 
   return (
     <div>
-      <PageHeader title="School Settings" description="Configure school information and system settings" />
+      <PageHeader title="Settings" description="Manage school information, users, and your profile" />
 
       <Tabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} className="mb-6" />
 
@@ -135,7 +151,7 @@ export default function SettingsPage() {
                 <div className="flex-1">
                   <FileUpload
                     accept="image/*"
-                    onFileSelect={handleLogoSelect}
+                    onFileSelect={(file) => handleImageSelect(file, setLogo, 'school logo')}
                     label="Upload Logo"
                     hint="PNG or JPG, up to 2 MB"
                   />
@@ -149,23 +165,47 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
+          <Card className="mt-6">
+            <CardHeader><CardTitle>School Profile Image</CardTitle></CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-6">
+                <div className="flex h-24 w-24 items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50">
+                  {profileImage ? (
+                    <div
+                      role="img"
+                      aria-label="School profile image preview"
+                      className="h-full w-full rounded-lg bg-cover bg-center"
+                      style={{ backgroundImage: `url("${profileImage}")` }}
+                    />
+                  ) : (
+                    <School className="h-10 w-10 text-gray-300" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <FileUpload
+                    accept="image/*"
+                    onFileSelect={(file) => handleImageSelect(file, setProfileImage, 'school profile')}
+                    label="Upload Profile Image"
+                    hint="PNG or JPG, up to 2 MB"
+                  />
+                  {profileImage && (
+                    <Button type="button" variant="ghost" size="sm" className="mt-2" onClick={() => setProfileImage('')}>
+                      Remove profile image
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <div className="mt-6 flex justify-end">
             <Button type="submit" isLoading={isSubmitting} leftIcon={<Save className="h-4 w-4" />}>Save Settings</Button>
           </div>
         </form>
       )}
 
-      {activeTab === 'academic' && (
-        <Card><CardContent><p className="py-8 text-center text-sm text-gray-500">Academic year and term configuration. Manage from the Academics module.</p></CardContent></Card>
-      )}
-
-      {activeTab === 'classes' && (
-        <Card><CardContent><p className="py-8 text-center text-sm text-gray-500">Class configuration. Manage from the Classes module.</p></CardContent></Card>
-      )}
-
-      {activeTab === 'fees' && (
-        <Card><CardContent><p className="py-8 text-center text-sm text-gray-500">Fee category configuration. Categories are pre-configured with defaults.</p></CardContent></Card>
-      )}
+      {activeTab === 'users' && <UserManagementPanel />}
+      {activeTab === 'profile' && <MyProfilePanel />}
     </div>
   );
 }

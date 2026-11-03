@@ -2,39 +2,33 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, School, Users, Pencil } from 'lucide-react';
+import { Plus, School, Pencil } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { dataService } from '@/lib/db';
-import { Class, Student, Staff } from '@/types';
+import { Class, Student } from '@/types';
 
 export default function ClassesPage() {
   const router = useRouter();
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
-  const [staff, setStaff] = useState<Staff[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
-      const [c, s, st] = await Promise.all([
+      const [c, s] = await Promise.all([
         dataService.getClasses(),
         dataService.getStudents(),
-        dataService.getStaff(),
       ]);
       setClasses(c);
       setStudents(s);
-      setStaff(st);
       setIsLoading(false);
     }
     load();
   }, []);
-
-  const staffMap: Record<string, string> = {};
-  staff.forEach((s) => { staffMap[s.id] = `${s.firstName} ${s.lastName}`; });
 
   const classStats = classes.map((cls) => {
     const enrolled = students.filter((s) => s.currentClassId === cls.id && s.enrollmentStatus === 'active');
@@ -69,9 +63,6 @@ export default function ClassesPage() {
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">{cls.name}{cls.stream ? ` ${cls.stream}` : ''}</h3>
-                  <p className="text-sm text-gray-500">
-                    Teacher: {cls.classTeacherId ? staffMap[cls.classTeacherId] || '—' : 'Unassigned'}
-                  </p>
                 </div>
                 <Badge variant="status" status={cls.status}>{cls.status}</Badge>
               </div>

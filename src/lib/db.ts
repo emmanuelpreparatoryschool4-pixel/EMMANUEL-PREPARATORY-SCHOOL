@@ -5,6 +5,7 @@ import {
   Term,
   Class,
   Subject,
+  Grade,
   GradingScale,
   Student,
   Guardian,
@@ -105,6 +106,7 @@ const tableNames: Record<string, string> = {
 const conflictColumns: Record<string, string> = {
   attendance_records: 'student_id,date',
   assessment_scores: 'assessment_id,student_id',
+  report_cards: 'student_id,term_id',
 };
 
 function getSupabase() {
@@ -307,8 +309,6 @@ export const db = createSupabaseDatabase() as unknown as EPSDatabase;
 
 export async function seedSchoolSetup(): Promise<void> {
   const now = new Date().toISOString();
-  const currentYear = new Date().getFullYear();
-  const academicYearId = `academic-year-${currentYear}`;
 
   if ((await db.schoolSettings.count()) === 0) {
     await db.schoolSettings.add({
@@ -329,67 +329,6 @@ export async function seedSchoolSetup(): Promise<void> {
       createdAt: now,
       updatedAt: now,
     } as SchoolSettings);
-  }
-
-  let academicYear = await db.academicYears.get(academicYearId);
-  if (!academicYear) {
-    academicYear = {
-      id: academicYearId,
-      name: `${currentYear}/${currentYear + 1}`,
-      startDate: `${currentYear}-09-01`,
-      endDate: `${currentYear + 1}-07-31`,
-      isCurrent: true,
-      status: 'active',
-      createdAt: now,
-      updatedAt: now,
-    };
-    await db.academicYears.add(academicYear);
-  }
-
-  if ((await db.terms.count()) === 0) {
-    await db.terms.bulkAdd([
-      { id: `term-${currentYear}-1`, academicYearId, name: 'First Term', startDate: `${currentYear}-09-01`, endDate: `${currentYear}-12-20`, isCurrent: true, status: 'active', createdAt: now, updatedAt: now },
-      { id: `term-${currentYear}-2`, academicYearId, name: 'Second Term', startDate: `${currentYear + 1}-01-10`, endDate: `${currentYear + 1}-04-05`, isCurrent: false, status: 'active', createdAt: now, updatedAt: now },
-      { id: `term-${currentYear}-3`, academicYearId, name: 'Third Term', startDate: `${currentYear + 1}-04-20`, endDate: `${currentYear + 1}-07-31`, isCurrent: false, status: 'active', createdAt: now, updatedAt: now },
-    ]);
-  }
-
-  if ((await db.classes.count()) === 0) {
-    await db.classes.bulkAdd(
-      PREDEFINED_CLASSES.map((schoolClass) => ({
-        id: `${academicYearId}-${schoolClass.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-        ...schoolClass,
-        academicYearId,
-        capacity: 40,
-        status: 'active' as const,
-        order: schoolClass.order,
-        createdAt: now,
-        updatedAt: now,
-      }))
-    );
-  }
-
-  if ((await db.subjects.count()) === 0) {
-    await db.subjects.bulkAdd(
-      DEFAULT_SUBJECTS.map((subject) => ({
-        id: `default-subject-${subject.code.toLowerCase()}`,
-        ...subject,
-        status: 'active' as const,
-        createdAt: now,
-        updatedAt: now,
-      }))
-    );
-  }
-
-  if ((await db.gradingScales.count()) === 0) {
-    await db.gradingScales.add({
-      id: 'default-grading-scale',
-      name: DEFAULT_GRADING_SCALE.name,
-      grades: DEFAULT_GRADING_SCALE.grades,
-      isDefault: true,
-      createdAt: now,
-      updatedAt: now,
-    });
   }
 
   if ((await db.feeCategories.count()) === 0) {
@@ -889,12 +828,37 @@ export const dataService = {
     return id;
   },
 
+  async updateAcademicYear(id: string, data: Partial<AcademicYear>): Promise<void> {
+    await db.academicYears.update(id, { ...data, updatedAt: new Date().toISOString() });
+  },
+
+  async setCurrentAcademicYear(id: string): Promise<void> {
+    const { error } = await getSupabase().rpc('set_current_academic_year', { p_year_id: id });
+    if (error) throw error;
+  },
+
   // Terms
   async getTerms(academicYearId?: string): Promise<Term[]> {
     if (academicYearId) {
       return db.terms.where('academicYearId').equals(academicYearId).toArray();
     }
     return db.terms.toArray();
+  },
+
+  async addTerm(term: Omit<Term, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+    const id = generateId();
+    const now = new Date().toISOString();
+    await db.terms.add({ ...term, id, createdAt: now, updatedAt: now });
+    return id;
+  },
+
+  async updateTerm(id: string, data: Partial<Term>): Promise<void> {
+    await db.terms.update(id, { ...data, updatedAt: new Date().toISOString() });
+  },
+
+  async setCurrentTerm(id: string): Promise<void> {
+    const { error } = await getSupabase().rpc('set_current_term', { p_term_id: id });
+    if (error) throw error;
   },
 
   async getCurrentTerm(): Promise<Term | undefined> {
@@ -1068,6 +1032,11 @@ export const dataService = {
 
   async getStudent(id: string): Promise<Student | undefined> {
     return db.students.get(id);
+  },
+
+  async getEnrollmentHistory(studentId: string): Promise<EnrollmentHistory[]> {
+    const history = await db.enrollmentHistory.where('studentId').equals(studentId).toArray();
+    return history.sort((a, b) => a.enrollmentDate.localeCompare(b.enrollmentDate));
   },
 
   async addStudent(student: Omit<Student, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
@@ -1298,7 +1267,11 @@ export const dataService = {
     endDate?: string;
     status?: string;
   }): Promise<AttendanceRecord[]> {
-    let records = await db.attendanceRecords.toArray();
+    let records = filters?.studentId
+      ? await db.attendanceRecords.where('studentId').equals(filters.studentId).toArray()
+      : filters?.classId
+        ? await db.attendanceRecords.where('classId').equals(filters.classId).toArray()
+        : await db.attendanceRecords.toArray();
 
     if (filters?.studentId) {
       records = records.filter((r) => r.studentId === filters.studentId);
@@ -1354,6 +1327,33 @@ export const dataService = {
     return db.assessmentTypes.toArray();
   },
 
+  async getDefaultGradingScale(): Promise<GradingScale | undefined> {
+    const scales = await db.gradingScales.toArray();
+    return scales.find((scale) => scale.isDefault) ?? scales[0];
+  },
+
+  async addGradingScale(name: string, grades: Grade[]): Promise<string> {
+    const now = new Date().toISOString();
+    const id = generateId();
+    await db.gradingScales.add({ id, name, grades, isDefault: true, createdAt: now, updatedAt: now });
+    return id;
+  },
+
+  async updateGradingScale(id: string, data: Pick<GradingScale, 'name' | 'grades'>): Promise<void> {
+    await db.gradingScales.update(id, { ...data, updatedAt: new Date().toISOString() });
+  },
+
+  async addSubject(subject: Omit<Subject, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+    const id = generateId();
+    const now = new Date().toISOString();
+    await db.subjects.add({ ...subject, id, createdAt: now, updatedAt: now });
+    return id;
+  },
+
+  async updateSubject(id: string, data: Partial<Subject>): Promise<void> {
+    await db.subjects.update(id, { ...data, updatedAt: new Date().toISOString() });
+  },
+
   async getAssessments(): Promise<Assessment[]> {
     return db.assessments.toArray();
   },
@@ -1374,6 +1374,35 @@ export const dataService = {
     return db.assessmentScores.where('assessmentId').equals(assessmentId).toArray();
   },
 
+  async getAssessmentScoresForStudent(studentId: string): Promise<AssessmentScore[]> {
+    return db.assessmentScores.where('studentId').equals(studentId).toArray();
+  },
+
+  async getReportCards(studentId?: string): Promise<ReportCard[]> {
+    if (studentId) {
+      return db.reportCards.where('studentId').equals(studentId).toArray();
+    }
+    return db.reportCards.toArray();
+  },
+
+  async saveReportCards(
+    reportCards: Array<Omit<ReportCard, 'id' | 'createdAt' | 'updatedAt'>>
+  ): Promise<void> {
+    if (!reportCards.length) return;
+    const existingCards = await db.reportCards.toArray();
+    const existingByKey = new Map(existingCards.map((card) => [`${card.studentId}:${card.termId}`, card]));
+    const now = new Date().toISOString();
+    await db.reportCards.bulkPut(reportCards.map((card) => {
+      const existing = existingByKey.get(`${card.studentId}:${card.termId}`);
+      return {
+        ...card,
+        id: existing?.id ?? generateId(),
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+    }));
+  },
+
   async saveAssessmentScores(
     assessmentId: string,
     scores: Array<{ studentId: string; score: number | null }>,
@@ -1381,6 +1410,21 @@ export const dataService = {
   ): Promise<void> {
     const assessment = await db.assessments.get(assessmentId);
     if (!assessment) throw new Error('Assessment not found.');
+
+    const classStudents = await this.getStudentsForClassTerm(
+      assessment.classId,
+      assessment.academicYearId,
+      assessment.termId
+    );
+    const validStudentIds = new Set(classStudents.map((student) => student.id));
+    if (scores.some((entry) => !validStudentIds.has(entry.studentId))) {
+      throw new Error('Scores can only be recorded for students enrolled in the assessment class for that term.');
+    }
+
+    const schoolClass = await db.classes.get(assessment.classId);
+    if (schoolClass?.subjectIds?.length && !schoolClass.subjectIds.includes(assessment.subjectId)) {
+      throw new Error('The assessment subject is not assigned to its class.');
+    }
 
     const existingScores = await db.assessmentScores.where('assessmentId').equals(assessmentId).toArray();
     const existingByStudent = new Map(existingScores.map((score) => [score.studentId, score]));
@@ -1393,6 +1437,10 @@ export const dataService = {
       if (entry.score === null) {
         if (existing) scoreIdsToDelete.push(existing.id);
         continue;
+      }
+
+      if (!Number.isFinite(entry.score) || entry.score < 0 || entry.score > 100 || entry.score > assessment.maxScore) {
+        throw new Error('Scores must be between zero and 100 and cannot exceed the assessment maximum.');
       }
 
       scoresToSave.push({

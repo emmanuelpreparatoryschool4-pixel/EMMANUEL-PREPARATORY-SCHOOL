@@ -30,7 +30,7 @@ import { Button } from '@/components/ui/Button';
 import { useToast } from '@/contexts/ToastContext';
 import { dataService, seedSchoolSetup } from '@/lib/db';
 import { formatCurrency, formatCurrencyCompact, getRelativeTime } from '@/lib/utils';
-import { ActivityLog } from '@/types';
+import { ActivityLog, Payment } from '@/types';
 import Link from 'next/link';
 
 interface DashboardStats {
@@ -50,20 +50,23 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [enrollmentData, setEnrollmentData] = useState<{ name: string; boys: number; girls: number; total: number }[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       try {
         await seedSchoolSetup();
-        const [dashboardStats, enrollment, logs] = await Promise.all([
+        const [dashboardStats, enrollment, logs, paymentHistory] = await Promise.all([
           dataService.getDashboardStats(),
           dataService.getEnrollmentByClass(),
           dataService.getActivityLogs(8),
+          dataService.getPayments(),
         ]);
         setStats(dashboardStats);
         setEnrollmentData(enrollment);
         setActivities(logs);
+        setPayments(paymentHistory);
       } catch (err) {
         console.error(err);
         addToast({ type: 'error', title: 'Error', message: 'Failed to load dashboard data.' });
@@ -81,15 +84,18 @@ export default function DashboardPage() {
       ]
     : [];
 
-  // Fee collection mock trend (derived from real data would require historical records)
-  const feeTrendData = [
-    { month: 'Sep', amount: Math.round((stats?.feesCollected ?? 0) * 0.15) },
-    { month: 'Oct', amount: Math.round((stats?.feesCollected ?? 0) * 0.2) },
-    { month: 'Nov', amount: Math.round((stats?.feesCollected ?? 0) * 0.18) },
-    { month: 'Dec', amount: Math.round((stats?.feesCollected ?? 0) * 0.22) },
-    { month: 'Jan', amount: Math.round((stats?.feesCollected ?? 0) * 0.15) },
-    { month: 'Feb', amount: Math.round((stats?.feesCollected ?? 0) * 0.1) },
-  ];
+  const feeTrendData = Array.from({ length: 6 }, (_, index) => {
+    const monthDate = new Date();
+    monthDate.setDate(1);
+    monthDate.setMonth(monthDate.getMonth() - (5 - index));
+    const month = monthDate.toISOString().slice(0, 7);
+    return {
+      month: monthDate.toLocaleDateString(undefined, { month: 'short' }),
+      amount: payments
+        .filter((payment) => payment.status === 'completed' && payment.paymentDate.startsWith(month))
+        .reduce((sum, payment) => sum + payment.amount, 0),
+    };
+  });
 
   const quickActions = [
     { label: 'Add Student', href: '/students/new', icon: UserPlus },
@@ -127,12 +133,6 @@ export default function DashboardPage() {
         title="Dashboard"
         description="Overview of school operations and key metrics"
       />
-
-      {/* Demo label */}
-      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        <strong>Demo Data:</strong> This dashboard displays seeded demonstration records. Replace
-        with real backend data when ready.
-      </div>
 
       {/* Quick Actions */}
       <div className="grid grid-cols-2 gap-3">

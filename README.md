@@ -1,6 +1,6 @@
 # Emmanuel Preparatory School (E.P.S.) — School Management System
 
-School management application for Emmanuel Preparatory School, a basic school in Ghana. The app supports school administrators, owners, headmasters, and teachers, with teacher access limited to assigned academic records.
+School management application for Emmanuel Preparatory School, a basic school in Ghana. The app is managed by school owners and administrators; teacher accounts and teacher-specific workflows are disabled while existing staff and academic data are preserved.
 
 ## Tech Stack
 
@@ -15,7 +15,7 @@ School management application for Emmanuel Preparatory School, a basic school in
 
 ## Supabase Setup
 
-The database schema is in [supabase/schema.sql](supabase/schema.sql). In a new Supabase project, open **SQL Editor**, paste the file contents, and run it. For an existing project, do not rerun the full schema. If the database predates the current profile roles, first apply [supabase/role_migration.sql](supabase/role_migration.sql), then run [supabase/upgrade.sql](supabase/upgrade.sql) once to add the academic promotion and payment functions plus teacher assessment permissions. The schema creates the school tables, admin/owner/headmaster/teacher profiles, relationships, indexes, and row-level security policies. Staff banking and identity fields are isolated in an admin/owner-only table.
+The database schema is in [supabase/schema.sql](supabase/schema.sql). In a new Supabase project, open **SQL Editor**, paste the file contents, and run it. For an existing project, do not rerun the full schema. If the database predates the current profile roles, first apply [supabase/role_migration.sql](supabase/role_migration.sql), then run [supabase/upgrade.sql](supabase/upgrade.sql). The upgrade disables teacher-role accounts and teacher RLS policies without deleting staff, class, or assessment history; it also adds class subject assignments, school profile images, report-card review status, score validation, academic-year/term activation, promotion, and payment functions. Staff banking and identity fields are isolated in an admin/owner-only table.
 
 Create the platform admin and school owner accounts in **Authentication > Users** after running the schema. New profiles are inactive (`pending`) until a privileged admin assigns an approved role. Promote each account in the SQL Editor:
 
@@ -35,9 +35,9 @@ For local development, create `.env.local` from `.env.example`, replace the URL 
 
 For password recovery, add `https://YOUR-VERCEL-DOMAIN/profile?password-recovery=1` to Supabase **Authentication > URL Configuration > Redirect URLs**. Add your local URL there too when testing locally.
 
-Disable public sign-ups. The admin can invite school owners, headmasters, and teachers; the school owner can invite headmasters and teachers from **User Management**. The invitee receives an email to set up access. Add your app's `/login` URL to Supabase **Authentication > URL Configuration > Redirect URLs**. Link each teacher invitation to that teacher's staff record, and set them as the class teacher for their assigned class. Teacher access is limited to attendance and academic records for that assigned class.
+Disable public sign-ups. The platform admin can invite school owners and administrators; the school owner can invite administrators from **Settings > User Management**. The invitee receives an email to set up access. Add your app's `/login` URL to Supabase **Authentication > URL Configuration > Redirect URLs**.
 
-The app reads and writes school records through Supabase. A new database starts with basic school setup/reference rows; add students, staff, classes, and finance data after signing in as the owner. The data adapter maps the SQL snake_case columns to the app's TypeScript model fields. Existing IndexedDB records are not migrated automatically. The install control in the sidebar opens the browser's native PWA install prompt when supported; otherwise, users can install through their browser's **Install app** or **Add to Home Screen** option.
+The app reads and writes school records through Supabase. On first sign-in, the app creates the basic school settings and reference categories. Before registering students, configure an academic year and its terms in **Academics & Results > Academic Configuration**, then create classes and assign subjects. Add finance data after signing in as an owner or administrator. The data adapter maps SQL snake_case columns to the app's TypeScript model fields. Existing IndexedDB records are not migrated automatically. The install control in the sidebar opens the browser's native PWA install prompt when supported; otherwise, users can install through their browser's **Install app** or **Add to Home Screen** option.
 
 ## Quick Start
 
