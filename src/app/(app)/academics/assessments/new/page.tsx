@@ -72,7 +72,10 @@ export default function NewAssessmentPage() {
   const filteredClasses = classes.filter((schoolClass) => schoolClass.academicYearId === selectedYear);
   const selectedClass = classes.find((schoolClass) => schoolClass.id === selectedClassId);
   const availableSubjects = selectedClass
-    ? subjects.filter((subject) => selectedClass.subjectIds?.includes(subject.id))
+    ? subjects.filter((subject) =>
+      subject.status === 'active' &&
+      (!selectedClass.subjectIds?.length || selectedClass.subjectIds.includes(subject.id))
+    )
     : [];
 
   const onSubmit = async (data: AssessmentFormValues) => {
@@ -84,7 +87,7 @@ export default function NewAssessmentPage() {
       addToast({ type: 'error', title: 'Check the academic year', message: 'The class and term must belong to the selected academic year.' });
       return;
     }
-    if (!schoolClass.subjectIds?.includes(data.subjectId)) {
+    if (schoolClass.subjectIds?.length && !schoolClass.subjectIds.includes(data.subjectId)) {
       addToast({ type: 'error', title: 'Subject not assigned', message: 'Choose a subject assigned to the selected class.' });
       return;
     }
@@ -94,6 +97,9 @@ export default function NewAssessmentPage() {
     }
     setIsSubmitting(true);
     try {
+      if (!schoolClass.subjectIds?.length) {
+        await dataService.updateClass(schoolClass.id, { subjectIds: [data.subjectId] });
+      }
       await dataService.addAssessment({
         ...data,
         maxScore: 100,
@@ -128,7 +134,16 @@ export default function NewAssessmentPage() {
             />
             <Select label="Subject" required options={availableSubjects.map((s) => ({ value: s.id, label: s.name }))} error={errors.subjectId?.message} {...register('subjectId')} />
             {selectedClass && availableSubjects.length === 0 && (
-              <p className="text-sm text-amber-700 md:col-span-2 lg:col-span-3">Assign subjects to this class from Classes &amp; Enrollment before creating assessments.</p>
+              <p className="text-sm text-amber-700 md:col-span-2 lg:col-span-3">
+                {subjects.length === 0
+                  ? 'Create subjects in Academics & Results > Academic Configuration before creating assessments.'
+                  : 'There are no active subjects available to assign to this class.'}
+              </p>
+            )}
+            {selectedClass && !selectedClass.subjectIds?.length && availableSubjects.length > 0 && (
+              <p className="text-sm text-amber-700 md:col-span-2 lg:col-span-3">
+                This class has no subject assignments yet. The selected subject will be linked to it when you create the assessment.
+              </p>
             )}
             <Select
               label="Academic Year"

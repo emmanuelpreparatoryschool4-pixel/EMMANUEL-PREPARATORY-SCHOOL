@@ -6,7 +6,6 @@ import {
   School,
   DollarSign,
   AlertCircle,
-  Package,
   UserPlus,
   Receipt,
 } from 'lucide-react';
@@ -40,7 +39,6 @@ interface DashboardStats {
   totalClasses: number;
   feesCollected: number;
   outstandingBalances: number;
-  inventoryItems: number;
 }
 
 const COLORS = ['#2563eb', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
@@ -110,7 +108,6 @@ export default function DashboardPage() {
         { title: 'Total Classes', value: stats.totalClasses, icon: School, color: 'text-green-600 bg-green-100' },
         { title: 'Fees Collected', value: formatCurrencyCompact(stats.feesCollected), icon: DollarSign, color: 'text-green-600 bg-green-100' },
         { title: 'Outstanding Balances', value: formatCurrencyCompact(stats.outstandingBalances), icon: AlertCircle, color: 'text-yellow-600 bg-yellow-100' },
-        { title: 'Inventory Items', value: stats.inventoryItems, icon: Package, color: 'text-indigo-600 bg-indigo-100' },
       ]
     : [];
 

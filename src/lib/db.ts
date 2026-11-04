@@ -1664,15 +1664,13 @@ export const dataService = {
     totalClasses: number;
     feesCollected: number;
     outstandingBalances: number;
-    inventoryItems: number;
   }> {
-    const [students, classes, feesCollected, outstanding, inventoryCount] =
+    const [students, classes, feesCollected, outstanding] =
       await Promise.all([
         db.students.where('enrollmentStatus').equals('active').toArray(),
         db.classes.where('status').equals('active').count(),
         this.getFeesCollected(),
         this.getOutstandingBalances(),
-        this.getInventoryCount(),
       ]);
 
     return {
@@ -1682,7 +1680,6 @@ export const dataService = {
       totalClasses: classes,
       feesCollected,
       outstandingBalances: outstanding,
-      inventoryItems: inventoryCount,
     };
   },
 

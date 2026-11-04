@@ -1,8 +1,12 @@
 -- Apply to an existing project after the base schema; this upgrade is safe to rerun.
+begin;
+
 alter table public.profiles drop constraint if exists profiles_role_check;
 update public.profiles set role = 'pending' where role = 'teacher';
+update public.profiles set role = 'owner' where role = 'admin';
+alter table public.profiles alter column role set default 'pending';
 alter table public.profiles add constraint profiles_role_check
-  check (role in ('pending', 'admin', 'owner', 'headmaster'));
+  check (role in ('pending', 'owner', 'headmaster', 'assistant_headmaster'));
 
 alter table public.assessments alter column teacher_id drop not null;
 alter table public.classes add column if not exists subject_ids text[] not null default '{}';
@@ -12,6 +16,114 @@ alter table public.enrollment_history
 alter table public.report_cards drop constraint if exists report_cards_status_check;
 alter table public.report_cards add constraint report_cards_status_check
   check (status in ('draft', 'ready_for_review', 'published'));
+
+create or replace function public.prevent_duplicate_class_names()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if exists (
+    select 1
+    from public.classes existing
+    where existing.academic_year_id = new.academic_year_id
+      and existing.id <> new.id
+      and regexp_replace(
+            lower(concat_ws(' ', btrim(existing.name), nullif(btrim(existing.stream), ''))),
+            '([0-9])\s+([a-z])$',
+            '\1\2'
+          ) =
+          regexp_replace(
+            lower(concat_ws(' ', btrim(new.name), nullif(btrim(new.stream), ''))),
+            '([0-9])\s+([a-z])$',
+            '\1\2'
+          )
+  ) then
+    raise exception 'A class with this name and stream already exists for the selected academic year.'
+      using errcode = '23505';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists classes_unique_name_per_year on public.classes;
+create trigger classes_unique_name_per_year
+  before insert or update of name, stream, academic_year_id on public.classes
+  for each row execute function public.prevent_duplicate_class_names();
+
+alter table public.profiles enable row level security;
+drop policy if exists profiles_read_self_or_owner on public.profiles;
+create policy profiles_read_self_or_owner on public.profiles
+  for select to authenticated
+  using (id = auth.uid() or public.current_school_role() = 'owner');
+drop policy if exists profiles_manage_admin on public.profiles;
+drop policy if exists profiles_manage_owner on public.profiles;
+drop policy if exists profiles_manage_admin_owner on public.profiles;
+create policy profiles_manage_owner on public.profiles
+  for all to authenticated
+  using (public.current_school_role() = 'owner')
+  with check (public.current_school_role() = 'owner');
+
+alter table public.staff_private_details enable row level security;
+drop policy if exists staff_private_details_owner_only on public.staff_private_details;
+create policy staff_private_details_owner_only on public.staff_private_details
+  for all to authenticated
+  using (public.current_school_role() = 'owner')
+  with check (public.current_school_role() = 'owner');
+
+alter table public.school_settings enable row level security;
+drop policy if exists school_settings_headmaster_read on public.school_settings;
+drop policy if exists school_settings_school_users_read on public.school_settings;
+create policy school_settings_school_users_read on public.school_settings
+  for select to authenticated
+  using (public.current_school_role() in ('owner', 'headmaster', 'assistant_headmaster'));
+drop policy if exists school_settings_owner_write on public.school_settings;
+create policy school_settings_owner_write on public.school_settings
+  for all to authenticated
+  using (public.current_school_role() = 'owner')
+  with check (public.current_school_role() = 'owner');
+
+alter table public.activity_logs enable row level security;
+drop policy if exists activity_logs_read_school_users on public.activity_logs;
+create policy activity_logs_read_school_users on public.activity_logs
+  for select to authenticated
+  using (public.current_school_role() in ('owner', 'headmaster', 'assistant_headmaster'));
+drop policy if exists activity_logs_insert_school_users on public.activity_logs;
+create policy activity_logs_insert_school_users on public.activity_logs
+  for insert to authenticated
+  with check (public.current_school_role() in ('owner', 'headmaster', 'assistant_headmaster'));
+
+do $$
+declare
+  table_name text;
+begin
+  foreach table_name in array array[
+    'academic_years', 'terms', 'subjects', 'classes', 'staff',
+    'students', 'guardians', 'enrollment_history', 'qualifications', 'staff_assignments',
+    'attendance_sessions', 'attendance_records', 'sync_queue', 'assessment_types',
+    'assessments', 'assessment_scores', 'grading_scales', 'report_cards',
+    'inventory_items', 'inventory_movements'
+  ] loop
+    execute format('alter table public.%I enable row level security', table_name);
+    execute format('drop policy if exists school_users_manage on public.%I', table_name);
+    execute format(
+      'create policy school_users_manage on public.%I for all to authenticated using (public.current_school_role() in (''owner'', ''headmaster'', ''assistant_headmaster'')) with check (public.current_school_role() in (''owner'', ''headmaster'', ''assistant_headmaster''))',
+      table_name
+    );
+  end loop;
+
+  foreach table_name in array array[
+    'fee_categories', 'fee_structures', 'invoices', 'payments', 'financial_adjustments'
+  ] loop
+    execute format('alter table public.%I enable row level security', table_name);
+    execute format('drop policy if exists school_users_manage on public.%I', table_name);
+    execute format(
+      'create policy school_users_manage on public.%I for all to authenticated using (public.current_school_role() in (''owner'', ''headmaster'')) with check (public.current_school_role() in (''owner'', ''headmaster''))',
+      table_name
+    );
+  end loop;
+end;
+$$;
 
 create or replace function public.validate_assessment_max_score()
 returns trigger
@@ -93,8 +205,8 @@ declare
   selected_count integer;
   destination_enrollment_count integer;
 begin
-  if public.current_school_role() not in ('admin', 'owner', 'headmaster') then
-    raise exception 'Only administrators, owners, or headmasters can promote students.';
+  if public.current_school_role() not in ('owner', 'headmaster') then
+    raise exception 'Only the owner or headmaster can promote students.';
   end if;
   if coalesce(cardinality(p_student_ids), 0) = 0 then
     raise exception 'Select at least one student to promote.';
@@ -264,8 +376,8 @@ declare
   selected_invoice public.invoices%rowtype;
   new_payment_id text := gen_random_uuid()::text;
 begin
-  if public.current_school_role() not in ('admin', 'owner', 'headmaster') then
-    raise exception 'Only administrators, owners, or headmasters can record payments.';
+  if public.current_school_role() not in ('owner', 'headmaster') then
+    raise exception 'Only the owner or headmaster can record payments.';
   end if;
   if auth.uid() is distinct from p_recorded_by then
     raise exception 'The recorded-by user does not match the signed-in account.';
@@ -322,8 +434,8 @@ security invoker
 set search_path = public
 as $$
 begin
-  if public.current_school_role() not in ('admin', 'owner', 'headmaster') then
-    raise exception 'Only school administrators can change the active academic year.';
+  if public.current_school_role() not in ('owner', 'headmaster') then
+    raise exception 'Only the owner or headmaster can change the active academic year.';
   end if;
 
   update public.academic_years set is_current = false where is_current;
@@ -346,8 +458,8 @@ as $$
 declare
   selected_term public.terms%rowtype;
 begin
-  if public.current_school_role() not in ('admin', 'owner', 'headmaster') then
-    raise exception 'Only school administrators can change the active term.';
+  if public.current_school_role() not in ('owner', 'headmaster') then
+    raise exception 'Only the owner or headmaster can change the active term.';
   end if;
 
   select * into selected_term from public.terms where id = p_term_id;
@@ -368,3 +480,45 @@ $$;
 
 grant execute on function public.set_current_academic_year(text) to authenticated;
 grant execute on function public.set_current_term(text) to authenticated;
+
+create or replace function public.reset_school_data()
+returns void
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+begin
+  delete from public.activity_logs;
+  delete from public.sync_queue;
+  delete from public.assessment_scores;
+  delete from public.report_cards;
+  delete from public.assessments;
+  delete from public.assessment_types;
+  delete from public.attendance_records;
+  delete from public.attendance_sessions;
+  delete from public.payments;
+  delete from public.financial_adjustments;
+  delete from public.invoices;
+  delete from public.fee_structures;
+  delete from public.fee_categories;
+  delete from public.inventory_movements;
+  delete from public.inventory_items;
+  delete from public.enrollment_history;
+  delete from public.guardians;
+  delete from public.staff_assignments;
+  delete from public.qualifications;
+  delete from public.staff_private_details;
+  delete from public.students;
+  delete from public.staff;
+  delete from public.classes;
+  delete from public.subjects;
+  delete from public.terms;
+  delete from public.academic_years;
+  delete from public.grading_scales;
+end;
+$$;
+
+revoke all on function public.reset_school_data() from public, anon, authenticated;
+grant execute on function public.reset_school_data() to service_role;
+
+commit;

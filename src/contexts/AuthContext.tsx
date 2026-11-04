@@ -13,7 +13,7 @@ interface AuthContextType extends AuthState {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function isUserRole(role: string): role is UserRole {
-  return role === 'admin' || role === 'owner' || role === 'headmaster';
+  return role === 'owner' || role === 'headmaster' || role === 'assistant_headmaster';
 }
 
 async function getProfileUser(userId: string): Promise<User | null> {

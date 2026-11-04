@@ -43,6 +43,12 @@ export default function FeesPage() {
   const [endDate, setEndDate] = useState('');
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('tab') === 'payments') {
+      queueMicrotask(() => setActiveTab('payments'));
+    }
+  }, []);
+
+  useEffect(() => {
     async function load() {
       try {
         const [inv, pay] = await Promise.all([
@@ -110,11 +116,21 @@ export default function FeesPage() {
   );
   const filteredInvoices = invoices.filter(invoiceMatches);
   const invoiceMap = new Map(invoices.map((invoice) => [invoice.id, invoice]));
-  const hasAcademicFilters = Boolean(selectedYearId || selectedTermId || selectedClassId);
   const academicPayments = payments.filter((payment) => {
-    if (!payment.invoiceId) return !hasAcademicFilters;
+    if (!payment.invoiceId) {
+      if (selectedTermId) return false;
+      const student = studentMap.get(payment.studentId);
+      return Boolean(student &&
+        (!selectedYearId || student.academicYearId === selectedYearId) &&
+        (!selectedClassId || student.currentClassId === selectedClassId));
+    }
     const invoice = invoiceMap.get(payment.invoiceId);
-    return Boolean(invoice && invoiceMatches(invoice));
+    if (invoice) return invoiceMatches(invoice);
+    if (selectedTermId) return false;
+    const student = studentMap.get(payment.studentId);
+    return Boolean(student &&
+      (!selectedYearId || student.academicYearId === selectedYearId) &&
+      (!selectedClassId || student.currentClassId === selectedClassId));
   });
   const filteredPayments = academicPayments.filter((payment) =>
     (!startDate || payment.paymentDate >= startDate) &&
@@ -160,7 +176,7 @@ export default function FeesPage() {
         .reduce((sum, payment) => sum + payment.amount, 0),
     };
   });
-  const isFeeManager = user?.role === 'admin' || user?.role === 'owner';
+  const isFeeManager = user?.role === 'owner' || user?.role === 'headmaster';
   const filteredFeeTerms = terms.filter((term) => term.academicYearId === feeTarget.academicYearId);
   const selectedAcademicTerms = terms.filter((term) => term.academicYearId === selectedYearId);
 
@@ -513,7 +529,7 @@ export default function FeesPage() {
             </Card>
           ) : (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              Only an owner or administrator can change class fee targets.
+              Only an Owner or Headmaster can change class fee targets.
             </div>
           )}
 

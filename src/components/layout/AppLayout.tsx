@@ -4,20 +4,28 @@ import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
+  const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  const hasRouteAccess = !(
+    (pathname.startsWith('/fees') && user?.role === 'assistant_headmaster') ||
+    (pathname.startsWith('/users') && user?.role !== 'owner')
+  );
+
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.push('/login');
+    } else if (!isLoading && isAuthenticated && !hasRouteAccess) {
+      router.replace('/dashboard');
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [hasRouteAccess, isAuthenticated, isLoading, router]);
 
   if (isLoading) {
     return (
@@ -30,7 +38,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!isAuthenticated) return null;
+  if (!isAuthenticated || !hasRouteAccess) return null;
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">

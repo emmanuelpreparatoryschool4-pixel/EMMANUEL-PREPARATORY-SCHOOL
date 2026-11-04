@@ -98,7 +98,7 @@ export default function NewPaymentPage() {
       });
 
       addToast({ type: 'success', title: 'Payment recorded', message: 'Receipt generated.' });
-      router.push('/fees');
+      router.push('/fees?tab=payments');
     } catch (error) {
       addToast({ type: 'error', title: 'Could not record payment', message: getErrorMessage(error, 'Failed to record payment.') });
     } finally {

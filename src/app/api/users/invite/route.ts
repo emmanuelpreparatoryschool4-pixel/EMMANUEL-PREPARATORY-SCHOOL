@@ -5,7 +5,7 @@ import { z } from 'zod';
 const inviteSchema = z.object({
   email: z.string().trim().email().transform((email) => email.toLowerCase()),
   fullName: z.string().trim().min(2).max(120),
-  role: z.enum(['owner', 'headmaster']),
+  role: z.enum(['owner', 'headmaster', 'assistant_headmaster']),
 });
 
 export async function POST(request: Request) {
@@ -13,7 +13,7 @@ export async function POST(request: Request) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceRoleKey) {
     return NextResponse.json(
-      { error: 'Server account setup is incomplete. Configure the Supabase service role key.' },
+      { error: 'Email invitations are not configured on this deployment. Add SUPABASE_SERVICE_ROLE_KEY to the server environment and redeploy.' },
       { status: 500 }
     );
   }
@@ -51,14 +51,12 @@ export async function POST(request: Request) {
       .eq('id', authData.user.id)
       .maybeSingle();
     if (profileError) throw profileError;
-    if (!inviter || !['admin', 'owner'].includes(inviter.role)) {
-      return NextResponse.json({ error: 'Only the platform admin or school owner can invite users.' }, { status: 403 });
-    }
-    if (inviter.role === 'owner' && parsed.data.role === 'owner') {
-      return NextResponse.json({ error: 'Only the platform admin can create another school owner.' }, { status: 403 });
+    if (!inviter || inviter.role !== 'owner') {
+      return NextResponse.json({ error: 'Only the school owner can invite users.' }, { status: 403 });
     }
 
-    const redirectTo = new URL('/login', request.url).toString();
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+    const redirectTo = new URL('/profile?password-recovery=1', appUrl).toString();
     const { data: inviteData, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(
       parsed.data.email,
       { data: { full_name: parsed.data.fullName }, redirectTo }

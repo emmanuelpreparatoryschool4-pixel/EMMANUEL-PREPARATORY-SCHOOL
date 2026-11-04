@@ -216,7 +216,7 @@ export function ResultsPanel() {
       .toLowerCase().includes(search.toLowerCase())
   );
   const availableTerms = terms.filter((term) => term.academicYearId === selectedYearId);
-  const canPromote = user?.role === 'admin' || user?.role === 'owner' || user?.role === 'headmaster';
+  const canPromote = user?.role === 'owner' || user?.role === 'headmaster';
   const sourceYear = academicYears.find((year) => year.id === selectedYearId);
   const sourceTerm = terms.find((term) => term.id === selectedTermId);
   const finalTerm = terms

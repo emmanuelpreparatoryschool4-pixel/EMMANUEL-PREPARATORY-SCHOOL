@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { UserCog, Shield } from 'lucide-react';
+import { UserCog } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -24,7 +24,7 @@ export function UserManagementPanel() {
   const [loadError, setLoadError] = useState('');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<Exclude<UserRole, 'admin'>>('headmaster');
+  const [role, setRole] = useState<UserRole>('headmaster');
 
   useEffect(() => {
     let active = true;
@@ -48,7 +48,7 @@ export function UserManagementPanel() {
         } else {
           setUsers(
             (data ?? [])
-              .filter((profile) => ['admin', 'owner', 'headmaster'].includes(profile.role))
+              .filter((profile) => ['owner', 'headmaster', 'assistant_headmaster'].includes(profile.role))
               .map((profile) => ({
                 id: profile.id,
                 email: profile.email,
@@ -75,9 +75,9 @@ export function UserManagementPanel() {
   }, []);
 
   const roleLabel = (value: UserRole) => ({
-    admin: 'Platform Admin',
-    owner: 'School Owner',
-    headmaster: 'Administrator',
+    owner: 'Owner',
+    headmaster: 'Headmaster',
+    assistant_headmaster: 'Assistant Headmaster',
   })[value];
 
   const handleInvite = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -137,7 +137,7 @@ export function UserManagementPanel() {
       </div>
     )},
     { key: 'role', header: 'Role', render: (u) => (
-      <Badge className={u.role === 'admin' || u.role === 'owner' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}>
+      <Badge className={u.role === 'owner' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}>
         {roleLabel(u.role)}
       </Badge>
     )},
@@ -147,7 +147,7 @@ export function UserManagementPanel() {
     <div>
       <PageHeader title="User Management" description="Manage system users and roles" />
 
-      {currentUser?.role === 'admin' || currentUser?.role === 'owner' ? (
+      {currentUser?.role === 'owner' ? (
         <Card className="mb-6 p-5">
           <CardHeader><CardTitle>Invite a school user</CardTitle></CardHeader>
           <CardContent>
@@ -158,11 +158,12 @@ export function UserManagementPanel() {
                 label="Role"
                 value={role}
                 onChange={(event) => {
-                  setRole(event.target.value as Exclude<UserRole, 'admin'>);
+                  setRole(event.target.value as UserRole);
                 }}
                 options={[
-                  ...(currentUser.role === 'admin' ? [{ value: 'owner', label: 'School Owner' }] : []),
-                  { value: 'headmaster', label: 'Administrator' },
+                  { value: 'owner', label: 'Owner' },
+                  { value: 'headmaster', label: 'Headmaster' },
+                  { value: 'assistant_headmaster', label: 'Assistant Headmaster' },
                 ]}
               />
               <div className="md:col-span-2">
@@ -172,7 +173,7 @@ export function UserManagementPanel() {
               </div>
             </form>
             <p className="mt-3 text-xs text-gray-500">
-              The invitee sets their own password from the email. Administrators can manage the school’s day-to-day operations.
+              The invitee sets their own password from the email. Owners can invite school users for their assigned responsibilities.
             </p>
           </CardContent>
         </Card>
@@ -180,32 +181,12 @@ export function UserManagementPanel() {
 
       <Card className="p-4">
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <strong>Account setup:</strong> Platform admins can invite school owners and administrators. School owners can invite administrators.
+          <strong>Account setup:</strong> Owners can invite Owner, Headmaster, and Assistant Headmaster accounts.
         </div>
         {loadError && <p role="alert" className="mb-4 text-sm text-red-700">{loadError}</p>}
         <Table columns={columns} data={users} keyExtractor={(u) => u.id} isLoading={isLoading} />
       </Card>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Card className="p-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-100 text-red-600"><Shield className="h-5 w-5" /></div>
-            <div><p className="font-medium text-gray-900">Platform Admin</p><p className="text-sm text-gray-500">Platform-level account and school owner setup</p></div>
-          </div>
-        </Card>
-        <Card className="p-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100 text-purple-600"><Shield className="h-5 w-5" /></div>
-            <div><p className="font-medium text-gray-900">School Owner</p><p className="text-sm text-gray-500">Full access, including account management and sensitive staff records</p></div>
-          </div>
-        </Card>
-        <Card className="p-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600"><Shield className="h-5 w-5" /></div>
-            <div><p className="font-medium text-gray-900">Administrator</p><p className="text-sm text-gray-500">Day-to-day academic, student, and school operations</p></div>
-          </div>
-        </Card>
-      </div>
     </div>
   );
 }

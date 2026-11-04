@@ -2,7 +2,7 @@
 // USER & AUTH TYPES
 // ============================================
 
-export type UserRole = 'admin' | 'owner' | 'headmaster';
+export type UserRole = 'owner' | 'headmaster' | 'assistant_headmaster';
 
 export interface User {
   id: string;

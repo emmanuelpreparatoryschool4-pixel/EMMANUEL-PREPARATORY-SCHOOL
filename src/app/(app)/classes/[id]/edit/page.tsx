@@ -14,6 +14,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { classSchema, type ClassFormValues } from '@/lib/validations';
 import { dataService } from '@/lib/db';
 import { getErrorMessage } from '@/lib/utils';
+import { isClassNameTaken } from '@/lib/class-naming';
 import { AcademicYear, Subject } from '@/types';
 
 export default function EditClassPage() {
@@ -41,7 +42,7 @@ export default function EditClassPage() {
       ]);
       if (!c) { router.push('/classes'); return; }
       setAcademicYears(years);
-      setSubjects(availableSubjects);
+      setSubjects(availableSubjects.filter((subject) => subject.status === 'active'));
       reset({ name: c.name, stream: c.stream || '', academicYearId: c.academicYearId, subjectIds: c.subjectIds ?? [], capacity: c.capacity, location: c.location || '', notes: c.notes || '' });
       setIsLoading(false);
     }
@@ -51,6 +52,11 @@ export default function EditClassPage() {
   const onSubmit = async (data: ClassFormValues) => {
     setIsSubmitting(true);
     try {
+      const currentClasses = await dataService.getClasses();
+      if (isClassNameTaken(currentClasses, data.academicYearId, data.name, data.stream, classId)) {
+        addToast({ type: 'error', title: 'Class already exists', message: 'Choose a different class name or stream for this academic year.' });
+        return;
+      }
       await dataService.updateClass(classId, data);
       addToast({ type: 'success', title: 'Updated' });
       router.push(`/classes/${classId}`);
@@ -102,6 +108,9 @@ export default function EditClassPage() {
               )}
             </fieldset>
             <Input label="Notes" className="md:col-span-2" {...register('notes')} />
+            <p className="text-sm text-gray-500 md:col-span-2">
+              Renaming this class preserves its enrolled students and historical records. This will not move students to another class.
+            </p>
           </CardContent>
         </Card>
         <div className="mt-6 flex justify-end gap-3">

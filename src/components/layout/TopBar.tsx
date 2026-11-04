@@ -53,7 +53,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
             <Avatar firstName={user?.name?.split(' ')[0]} lastName={user?.name?.split(' ')[1]} size="sm" />
             <div className="hidden text-left sm:block">
               <p className="text-sm font-medium text-gray-900">{user?.name}</p>
-              <p className="text-xs capitalize text-gray-500">{user?.role}</p>
+              <p className="text-xs text-gray-500">{user?.role === 'assistant_headmaster' ? 'Assistant Headmaster' : user?.role === 'headmaster' ? 'Headmaster' : 'Owner'}</p>
             </div>
             <ChevronDown className="hidden h-4 w-4 text-gray-400 sm:block" />
           </button>
@@ -62,7 +62,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
             <div className="absolute right-0 mt-2 w-56 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
               <div className="border-b border-gray-100 px-4 py-2 sm:hidden">
                 <p className="text-sm font-medium text-gray-900">{user?.name}</p>
-                <p className="text-xs capitalize text-gray-500">{user?.role}</p>
+                <p className="text-xs text-gray-500">{user?.role === 'assistant_headmaster' ? 'Assistant Headmaster' : user?.role === 'headmaster' ? 'Headmaster' : 'Owner'}</p>
               </div>
               <Link
                 href="/profile"

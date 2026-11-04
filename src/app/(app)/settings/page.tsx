@@ -12,7 +12,9 @@ import { FileUpload } from '@/components/ui/FileUpload';
 import { Tabs } from '@/components/ui/Tabs';
 import { UserManagementPanel } from '@/components/settings/UserManagementPanel';
 import { MyProfilePanel } from '@/components/settings/MyProfilePanel';
+import { SchoolResetPanel } from '@/components/settings/SchoolResetPanel';
 import { useToast } from '@/contexts/ToastContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { schoolSettingsSchema, type SchoolSettingsFormValues } from '@/lib/validations';
 import { dataService } from '@/lib/db';
 import { SchoolSettings } from '@/types';
@@ -20,8 +22,9 @@ import { getErrorMessage } from '@/lib/utils';
 
 export default function SettingsPage() {
   const { addToast } = useToast();
+  const { user } = useAuth();
   const [settings, setSettings] = useState<SchoolSettings | null>(null);
-  const [activeTab, setActiveTab] = useState('school');
+  const [activeTab, setActiveTab] = useState(user?.role === 'owner' ? 'school' : 'profile');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [logo, setLogo] = useState<string | undefined>();
   const [profileImage, setProfileImage] = useState<string | undefined>();
@@ -103,8 +106,10 @@ export default function SettingsPage() {
   };
 
   const tabs = [
-    { id: 'school', label: 'School Information' },
-    { id: 'users', label: 'User Management' },
+    ...(user?.role === 'owner' ? [
+      { id: 'school', label: 'School Information' },
+      { id: 'users', label: 'User Management' },
+    ] : []),
     { id: 'profile', label: 'My Profile' },
   ];
 
@@ -114,7 +119,7 @@ export default function SettingsPage() {
 
       <Tabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} className="mb-6" />
 
-      {activeTab === 'school' && (
+      {activeTab === 'school' && user?.role === 'owner' && (
         <form onSubmit={handleSubmit(onSubmit)}>
           <Card>
             <CardHeader><CardTitle>School Information</CardTitle></CardHeader>
@@ -204,7 +209,8 @@ export default function SettingsPage() {
         </form>
       )}
 
-      {activeTab === 'users' && <UserManagementPanel />}
+      {activeTab === 'school' && user?.role === 'owner' && <SchoolResetPanel />}
+      {activeTab === 'users' && user?.role === 'owner' && <UserManagementPanel />}
       {activeTab === 'profile' && <MyProfilePanel />}
     </div>
   );

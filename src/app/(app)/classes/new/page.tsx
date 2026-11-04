@@ -14,12 +14,14 @@ import { useToast } from '@/contexts/ToastContext';
 import { classSchema, type ClassFormValues } from '@/lib/validations';
 import { dataService } from '@/lib/db';
 import { getErrorMessage } from '@/lib/utils';
-import { AcademicYear, Subject } from '@/types';
+import { getNextStreamSuggestions, isClassNameTaken } from '@/lib/class-naming';
+import { AcademicYear, Class, Subject } from '@/types';
 
 export default function NewClassPage() {
   const router = useRouter();
   const { addToast } = useToast();
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
+  const [classes, setClasses] = useState<Class[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -28,15 +30,19 @@ export default function NewClassPage() {
     defaultValues: { capacity: 40, subjectIds: [] },
   });
   const selectedSubjectIds = useWatch({ control, name: 'subjectIds' }) ?? [];
+  const selectedAcademicYearId = useWatch({ control, name: 'academicYearId' });
+  const streamSuggestions = getNextStreamSuggestions(classes, selectedAcademicYearId ?? '');
 
   useEffect(() => {
     async function load() {
-      const [years, availableSubjects] = await Promise.all([
+      const [years, availableSubjects, currentClasses] = await Promise.all([
         dataService.getAcademicYears(),
         dataService.getSubjects(),
+        dataService.getClasses(),
       ]);
       setAcademicYears(years);
-      setSubjects(availableSubjects);
+      setSubjects(availableSubjects.filter((subject) => subject.status === 'active'));
+      setClasses(currentClasses);
       const current = years.find((y) => y.isCurrent);
       if (current) setValue('academicYearId', current.id);
     }
@@ -46,8 +52,11 @@ export default function NewClassPage() {
   const onSubmit = async (data: ClassFormValues) => {
     setIsSubmitting(true);
     try {
-      const existing = await dataService.getClasses();
-      await dataService.addClass({ ...data, status: 'active', order: existing.length + 1 });
+      if (isClassNameTaken(classes, data.academicYearId, data.name, data.stream)) {
+        addToast({ type: 'error', title: 'Class already exists', message: 'Choose a different class name or stream for this academic year.' });
+        return;
+      }
+      await dataService.addClass({ ...data, status: 'active', order: classes.length + 1 });
       addToast({ type: 'success', title: 'Class added' });
       router.push('/classes');
     } catch (error) {
@@ -65,7 +74,23 @@ export default function NewClassPage() {
         <Card>
           <CardHeader><CardTitle>Class Details</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Input label="Class Name" required error={errors.name?.message} {...register('name')} placeholder="e.g. Primary 1" />
+            <Input label="Class Name" required error={errors.name?.message} {...register('name')} placeholder="e.g. Class 3A or Nursery 1A" />
+            {streamSuggestions.length > 0 && (
+              <div className="md:col-span-2">
+                <p className="mb-2 text-sm font-medium text-gray-700">Continue a class split</p>
+                <div className="flex flex-wrap gap-2">
+                  {streamSuggestions.map((suggestion) => (
+                    <Button key={suggestion} type="button" size="sm" variant="outline"
+                      onClick={() => {
+                        setValue('name', suggestion, { shouldDirty: true, shouldValidate: true });
+                        setValue('stream', '', { shouldDirty: true });
+                      }}>
+                      Use {suggestion}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
             <Input label="Stream" {...register('stream')} placeholder="e.g. A" />
             <Select label="Academic Year" required options={academicYears.map((y) => ({ value: y.id, label: y.name }))} error={errors.academicYearId?.message} {...register('academicYearId')} />
             <Input label="Capacity" type="number" required error={errors.capacity?.message} {...register('capacity', { valueAsNumber: true })} />
@@ -96,6 +121,9 @@ export default function NewClassPage() {
               )}
             </fieldset>
             <Input label="Notes" className="md:col-span-2" {...register('notes')} />
+            <p className="text-sm text-gray-500 md:col-span-2">
+              Renaming a class keeps its existing students and history. Students are never moved by creating or renaming a class.
+            </p>
           </CardContent>
         </Card>
         <div className="mt-6 flex justify-end gap-3">

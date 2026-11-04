@@ -13,7 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePWAInstall } from '@/contexts/PWAInstallContext';
 import { useToast } from '@/contexts/ToastContext';
 import { supabase } from '@/lib/supabase';
-import { formatDate } from '@/lib/utils';
+import { formatDate, getErrorMessage } from '@/lib/utils';
 
 export function MyProfilePanel() {
   const { user } = useAuth();
@@ -33,11 +33,11 @@ export function MyProfilePanel() {
   }, []);
 
   if (!user) return null;
-  const roleName = user.role === 'admin'
-    ? 'Platform Admin'
-    : user.role === 'owner'
-      ? 'School Owner'
-      : 'Administrator';
+  const roleName = user.role === 'assistant_headmaster'
+    ? 'Assistant Headmaster'
+    : user.role === 'headmaster'
+      ? 'Headmaster'
+      : 'Owner';
 
   const handleInstall = async () => {
     try {
@@ -47,10 +47,14 @@ export function MyProfilePanel() {
       } else if (result === 'dismissed') {
         addToast({ type: 'info', title: 'Installation cancelled' });
       } else {
+        const isAppleMobile = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         addToast({
           type: 'info',
-          title: 'Install from your browser',
-          message: 'Open the browser menu and choose Install app or Add to Home Screen.',
+          title: isAppleMobile ? 'Add EPS to your Home Screen' : 'Install from your browser',
+          message: isAppleMobile
+            ? 'On iPhone or iPad, tap Share, then Add to Home Screen. iOS does not allow websites to open the install prompt directly.'
+            : 'This browser does not support a direct install prompt. Open its menu and choose Install app or Add to Home Screen.',
         });
       }
     } catch (error) {
@@ -71,12 +75,16 @@ export function MyProfilePanel() {
     setIsRequestingReset(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-        redirectTo: `${window.location.origin}/profile?password-recovery=1`,
+        redirectTo: `${(process.env.NEXT_PUBLIC_APP_URL || window.location.origin).replace(/\/+$/, '')}/profile?password-recovery=1`,
       });
       if (error) throw error;
       addToast({ type: 'success', title: 'Reset email sent', message: `Check ${user.email} for the reset link.` });
-    } catch {
-      addToast({ type: 'error', title: 'Could not send reset email', message: 'Check your Supabase Auth redirect URL settings.' });
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Could not send reset email',
+        message: getErrorMessage(error, 'Add the application URL to Supabase Auth redirect URLs and try again.'),
+      });
     } finally {
       setIsRequestingReset(false);
     }
@@ -125,7 +133,7 @@ export function MyProfilePanel() {
           <h2 className="mt-4 text-lg font-semibold text-gray-900">{user.name}</h2>
           <p className="text-sm text-gray-500">{user.email}</p>
           <div className="mt-3 flex justify-center">
-            <Badge className={user.role === 'admin' || user.role === 'owner' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}>
+            <Badge className={user.role === 'owner' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}>
               {roleName}
             </Badge>
           </div>

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Users, School, BarChart3, BookOpen,
-  DollarSign, Package, FileText, Settings, History, X, ChevronLeft, Download,
+  DollarSign, FileText, Settings, History, X, ChevronLeft, Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,16 +20,15 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'owner', 'headmaster'] },
-  { label: 'Students', href: '/students', icon: Users, roles: ['admin', 'owner', 'headmaster'] },
-  { label: 'Classes & Enrollment', href: '/classes', icon: School, roles: ['admin', 'owner', 'headmaster'] },
-  { label: 'School Statistics', href: '/statistics', icon: BarChart3, roles: ['admin', 'owner', 'headmaster'] },
-  { label: 'Academics & Results', href: '/academics', icon: BookOpen, roles: ['admin', 'owner', 'headmaster'] },
-  { label: 'Fees & Payments', href: '/fees', icon: DollarSign, roles: ['admin', 'owner', 'headmaster'] },
-  { label: 'Inventory', href: '/inventory', icon: Package, roles: ['admin', 'owner', 'headmaster'] },
-  { label: 'Reports', href: '/reports', icon: FileText, roles: ['admin', 'owner', 'headmaster'] },
-  { label: 'Settings', href: '/settings', icon: Settings, roles: ['admin', 'owner'] },
-  { label: 'Activity History', href: '/activity', icon: History, roles: ['admin', 'owner', 'headmaster'] },
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['owner', 'headmaster', 'assistant_headmaster'] },
+  { label: 'Students', href: '/students', icon: Users, roles: ['owner', 'headmaster', 'assistant_headmaster'] },
+  { label: 'Classes & Enrollment', href: '/classes', icon: School, roles: ['owner', 'headmaster', 'assistant_headmaster'] },
+  { label: 'School Statistics', href: '/statistics', icon: BarChart3, roles: ['owner', 'headmaster', 'assistant_headmaster'] },
+  { label: 'Academics & Results', href: '/academics', icon: BookOpen, roles: ['owner', 'headmaster', 'assistant_headmaster'] },
+  { label: 'Fees & Payments', href: '/fees', icon: DollarSign, roles: ['owner', 'headmaster'] },
+  { label: 'Reports', href: '/reports', icon: FileText, roles: ['owner', 'headmaster', 'assistant_headmaster'] },
+  { label: 'Settings', href: '/settings', icon: Settings, roles: ['owner'] },
+  { label: 'Activity History', href: '/activity', icon: History, roles: ['owner', 'headmaster', 'assistant_headmaster'] },
 ];
 
 export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: SidebarProps) {
@@ -50,11 +49,15 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
       } else if (outcome === 'dismissed') {
         addToast({ type: 'info', title: 'Install cancelled' });
       } else {
+        const isAppleMobile = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         addToast({
           type: 'info',
-          title: 'Install from your browser',
-          message: 'Open the browser menu and choose Install app or Add to Home Screen.',
-          duration: 8000,
+          title: isAppleMobile ? 'Add EPS to your Home Screen' : 'Install from your browser',
+          message: isAppleMobile
+            ? 'On iPhone or iPad, tap Share, then Add to Home Screen. iOS does not allow websites to open the install prompt directly.'
+            : 'This browser does not support a direct install prompt. Open its menu and choose Install app or Add to Home Screen.',
+          duration: 10000,
         });
       }
     } catch (error) {
