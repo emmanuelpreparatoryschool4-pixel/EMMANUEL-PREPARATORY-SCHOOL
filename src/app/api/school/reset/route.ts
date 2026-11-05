@@ -6,6 +6,16 @@ const resetSchema = z.object({
   confirmation: z.literal('RESET'),
 });
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  if (typeof error === 'object' && error !== null && 'message' in error &&
+    typeof error.message === 'string') {
+    return error.message;
+  }
+  return 'Unable to reset school data.';
+}
+
 export async function POST(request: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -59,7 +69,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('School data reset failed', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unable to reset school data.' },
+      { error: getErrorMessage(error) },
       { status: 500 }
     );
   }

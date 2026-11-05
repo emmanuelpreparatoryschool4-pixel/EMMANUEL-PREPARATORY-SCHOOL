@@ -25,9 +25,9 @@ set role = 'owner'
 where email = 'school-owner@example.com';
 ```
 
-The app uses Supabase Auth for sign-in and loads account profiles from Supabase. Add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_APP_URL` (the canonical deployed application URL, with no trailing slash) to Vercel. User invitations also require `SUPABASE_SERVICE_ROLE_KEY` as a server-only environment variable. Use [.env.example](.env.example) as a local template. Never add the service-role key to a `NEXT_PUBLIC_` variable.
+The app uses Supabase Auth for sign-in and loads account profiles from Supabase. Add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_APP_URL` (the canonical deployed application URL, with no trailing slash) to Vercel. User invitations and the Owner-only school reset require `SUPABASE_SERVICE_ROLE_KEY` as a server-only environment variable. Use [.env.example](.env.example) as a local template. Never add the service-role key to a `NEXT_PUBLIC_` variable.
 
-For local development, create `.env.local` from `.env.example`, replace the URL and anon-key placeholders with the values from **Supabase > Project Settings > API**, then restart `npm run dev`. These two `NEXT_PUBLIC_` values are required for all app reads and writes; the service-role key is only needed for sending account invitations. Never commit `.env.local`.
+For local development, create `.env.local` from `.env.example`, replace the URL and anon-key placeholders with the values from **Supabase > Project Settings > API**, then restart `npm run dev`. These two `NEXT_PUBLIC_` values are required for all app reads and writes; the service-role key is required for sending account invitations and resetting school data. Never commit `.env.local`.
 
 For invitation and password recovery links, set `NEXT_PUBLIC_APP_URL` to the production app URL and set Supabase **Authentication > URL Configuration > Site URL** to that same deployed app. Add `https://YOUR-VERCEL-DOMAIN/**` to **Redirect URLs** (and `http://localhost:3000/**` only for local testing). The app sends both password recovery and invitations to `/profile?password-recovery=1` so invitees can set their password; Supabase must allow that destination.
 
