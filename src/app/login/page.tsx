@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Eye, EyeOff } from 'lucide-react';
 import { loginSchema, type LoginFormData } from '@/lib/validations';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -15,7 +14,6 @@ export default function LoginPage() {
   const router = useRouter();
   const { login, isAuthenticated } = useAuth();
   const { addToast } = useToast();
-  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const schoolPhoto = "url('https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=2000&q=85')";
 
@@ -118,19 +116,10 @@ export default function LoginPage() {
               <div className="relative">
                 <Input
                   label="Password"
-                  type={showPassword ? 'text' : 'password'}
+                  type="password"
                   placeholder="Enter your password"
                   error={errors.password?.message}
                   required
-                  rightIcon={
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="pointer-events-auto text-gray-400 hover:text-gray-600"
-                    >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  }
                   {...register('password')}
                 />
               </div>

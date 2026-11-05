@@ -12,6 +12,13 @@ export const metadata: Metadata = {
   title: 'E.P.S. School Management System',
   description: 'School Management System for Emmanuel Preparatory School',
   manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/book-logo.svg', type: 'image/svg+xml' },
+    ],
+    apple: [{ url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' }],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',

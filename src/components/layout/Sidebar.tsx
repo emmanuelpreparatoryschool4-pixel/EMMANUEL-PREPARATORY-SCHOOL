@@ -48,17 +48,6 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
         addToast({ type: 'success', title: 'App installed', message: 'You can now open EPS from your device.' });
       } else if (outcome === 'dismissed') {
         addToast({ type: 'info', title: 'Install cancelled' });
-      } else {
-        const isAppleMobile = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-        addToast({
-          type: 'info',
-          title: isAppleMobile ? 'Add EPS to your Home Screen' : 'Install from your browser',
-          message: isAppleMobile
-            ? 'On iPhone or iPad, tap Share, then Add to Home Screen. iOS does not allow websites to open the install prompt directly.'
-            : 'This browser does not support a direct install prompt. Open its menu and choose Install app or Add to Home Screen.',
-          duration: 10000,
-        });
       }
     } catch (error) {
       addToast({

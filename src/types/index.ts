@@ -430,6 +430,18 @@ export interface FeeStructure {
   updatedAt: string;
 }
 
+export interface ClassFeeTarget {
+  id: string;
+  academicYearId: string;
+  termId: string;
+  classId: string;
+  amount: number;
+  dueDate: string;
+  status: 'active' | 'archived';
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Invoice {
   id: string;
   invoiceNumber: string;
@@ -464,6 +476,7 @@ export interface Payment {
   paymentReference: string;
   studentId: string;
   invoiceId?: string | null;
+  feeTargetId?: string | null;
   amount: number;
   paymentDate: string;
   paymentMethod: PaymentMethod;

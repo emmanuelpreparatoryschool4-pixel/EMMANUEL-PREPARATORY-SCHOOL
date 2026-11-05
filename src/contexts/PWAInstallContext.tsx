@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useCallback, useContext, useEffect, useState, useSyncExternalStore } from 'react';
+import { Modal } from '@/components/ui/Modal';
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -37,6 +38,7 @@ function getServerInstallStatus() {
 export function PWAInstallProvider({ children }: { children: React.ReactNode }) {
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [installedFromPrompt, setInstalledFromPrompt] = useState(false);
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
   const isInstalled = useSyncExternalStore(subscribeToInstallStatus, getInstallStatus, getServerInstallStatus) || installedFromPrompt;
 
   useEffect(() => {
@@ -58,7 +60,10 @@ export function PWAInstallProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const installApp = useCallback(async () => {
-    if (!installPrompt) return 'unavailable' as const;
+    if (!installPrompt) {
+      setShowInstallHelp(true);
+      return 'unavailable' as const;
+    }
     await installPrompt.prompt();
     const { outcome } = await installPrompt.userChoice;
     setInstallPrompt(null);
@@ -66,9 +71,48 @@ export function PWAInstallProvider({ children }: { children: React.ReactNode }) 
   }, [installPrompt]);
 
   return (
-    <PWAInstallContext.Provider value={{ canInstall: Boolean(installPrompt), isInstalled, installApp }}>
+    <PWAInstallContext.Provider value={{
+      canInstall: Boolean(installPrompt),
+      isInstalled,
+      installApp,
+    }}>
       {children}
+      <InstallHelpDialog isOpen={showInstallHelp} onClose={() => setShowInstallHelp(false)} />
     </PWAInstallContext.Provider>
+  );
+}
+
+function InstallHelpDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const isAppleMobile = typeof navigator !== 'undefined' &&
+    (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+  const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Install EPS on this device" size="sm">
+      {isAppleMobile ? (
+        <ol className="list-decimal space-y-2 pl-5 text-sm text-gray-700">
+          <li>Open this page in Safari.</li>
+          <li>Tap the Share button.</li>
+          <li>Choose <strong>Add to Home Screen</strong>, then tap Add.</li>
+        </ol>
+      ) : isAndroid ? (
+        <ol className="list-decimal space-y-2 pl-5 text-sm text-gray-700">
+          <li>Open this page in Chrome.</li>
+          <li>Tap the three-dot menu.</li>
+          <li>Choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.</li>
+        </ol>
+      ) : (
+        <ol className="list-decimal space-y-2 pl-5 text-sm text-gray-700">
+          <li>In Chrome or Edge, open the browser menu.</li>
+          <li>Choose <strong>Install page as app</strong> or use the install icon in the address bar.</li>
+          <li>Confirm <strong>Install</strong> in the browser dialog.</li>
+        </ol>
+      )}
+      <p className="mt-4 text-xs text-gray-500">
+        Browsers control installation prompts; this option is available when the browser supports app installation.
+      </p>
+    </Modal>
   );
 }
 

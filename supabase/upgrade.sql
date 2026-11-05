@@ -17,6 +17,68 @@ alter table public.report_cards drop constraint if exists report_cards_status_ch
 alter table public.report_cards add constraint report_cards_status_check
   check (status in ('draft', 'ready_for_review', 'published'));
 
+create table if not exists public.class_fee_targets (
+  id text primary key default gen_random_uuid()::text,
+  academic_year_id text not null references public.academic_years(id) on delete restrict,
+  term_id text not null references public.terms(id) on delete restrict,
+  class_id text not null references public.classes(id) on delete restrict,
+  amount bigint not null check (amount > 0),
+  due_date date not null default current_date,
+  status text not null default 'active' check (status in ('active', 'archived')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (class_id, academic_year_id, term_id)
+);
+
+create or replace function public.validate_class_fee_target_period()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if new.amount is null or new.amount <= 0 then
+    raise exception 'The class fee must be greater than zero.';
+  end if;
+  if not exists (
+    select 1
+    from public.classes c
+    join public.terms t on t.id = new.term_id and t.academic_year_id = new.academic_year_id
+    where c.id = new.class_id and c.academic_year_id = new.academic_year_id
+  ) then
+    raise exception 'The selected class, academic year, and term do not match.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists class_fee_targets_validate_period on public.class_fee_targets;
+create trigger class_fee_targets_validate_period
+  before insert or update of class_id, academic_year_id, term_id, amount on public.class_fee_targets
+  for each row execute function public.validate_class_fee_target_period();
+
+insert into public.class_fee_targets (
+  academic_year_id, term_id, class_id, amount, due_date, status, created_at, updated_at
+)
+select
+  fs.academic_year_id,
+  fs.term_id,
+  fs.class_id,
+  sum(fs.amount)::bigint,
+  max(fs.due_date),
+  'active',
+  min(fs.created_at),
+  max(fs.updated_at)
+from public.fee_structures fs
+join public.classes c on c.id = fs.class_id and c.academic_year_id = fs.academic_year_id
+join public.terms t on t.id = fs.term_id and t.academic_year_id = fs.academic_year_id
+where fs.status = 'active' and fs.amount > 0
+group by fs.academic_year_id, fs.term_id, fs.class_id
+on conflict (class_id, academic_year_id, term_id) do nothing;
+
+alter table public.payments
+  add column if not exists fee_target_id text references public.class_fee_targets(id) on delete restrict;
+grant select, insert, update, delete on public.class_fee_targets to authenticated;
+
 create or replace function public.prevent_duplicate_class_names()
 returns trigger
 language plpgsql
@@ -113,7 +175,7 @@ begin
   end loop;
 
   foreach table_name in array array[
-    'fee_categories', 'fee_structures', 'invoices', 'payments', 'financial_adjustments'
+    'fee_categories', 'fee_structures', 'class_fee_targets', 'invoices', 'payments', 'financial_adjustments'
   ] loop
     execute format('alter table public.%I enable row level security', table_name);
     execute format('drop policy if exists school_users_manage on public.%I', table_name);
@@ -382,7 +444,7 @@ begin
   if auth.uid() is distinct from p_recorded_by then
     raise exception 'The recorded-by user does not match the signed-in account.';
   end if;
-  if p_amount <= 0 then
+  if p_amount is null or p_amount <= 0 then
     raise exception 'Payment amount must be greater than zero.';
   end if;
 
@@ -481,6 +543,170 @@ $$;
 grant execute on function public.set_current_academic_year(text) to authenticated;
 grant execute on function public.set_current_term(text) to authenticated;
 
+create or replace function public.save_class_fee_target(
+  p_class_id text,
+  p_academic_year_id text,
+  p_term_id text,
+  p_amount bigint
+)
+returns text
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  target_id text;
+begin
+  if public.current_school_role() not in ('owner', 'headmaster') then
+    raise exception 'Only the owner or headmaster can configure class fees.';
+  end if;
+  if p_amount is null or p_amount <= 0 then
+    raise exception 'The class fee must be greater than zero.';
+  end if;
+  if not exists (
+    select 1
+    from public.classes c
+    join public.terms t on t.id = p_term_id and t.academic_year_id = p_academic_year_id
+    where c.id = p_class_id and c.academic_year_id = p_academic_year_id
+  ) then
+    raise exception 'The selected class, academic year, and term do not match.';
+  end if;
+
+  insert into public.class_fee_targets (class_id, academic_year_id, term_id, amount, status)
+  values (p_class_id, p_academic_year_id, p_term_id, p_amount, 'active')
+  on conflict (class_id, academic_year_id, term_id) do update
+  set amount = excluded.amount,
+      status = 'active',
+      updated_at = now()
+  returning id into target_id;
+
+  return target_id;
+end;
+$$;
+
+revoke all on function public.save_class_fee_target(text, text, text, bigint) from public, anon;
+grant execute on function public.save_class_fee_target(text, text, text, bigint) to authenticated;
+
+create or replace function public.record_class_fee_payment(
+  p_receipt_number text,
+  p_payment_reference text,
+  p_student_id text,
+  p_fee_target_id text,
+  p_amount bigint,
+  p_payment_date date,
+  p_payment_method text,
+  p_transaction_reference text,
+  p_recorded_by uuid,
+  p_notes text
+)
+returns text
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  selected_target public.class_fee_targets%rowtype;
+  existing_payment public.payments%rowtype;
+  amount_paid bigint;
+  new_payment_id text := gen_random_uuid()::text;
+begin
+  if public.current_school_role() not in ('owner', 'headmaster') then
+    raise exception 'Only the owner or headmaster can record payments.';
+  end if;
+  if auth.uid() is distinct from p_recorded_by then
+    raise exception 'The recorded-by user does not match the signed-in account.';
+  end if;
+  if coalesce(btrim(p_receipt_number), '') = '' or coalesce(btrim(p_payment_reference), '') = '' then
+    raise exception 'A receipt number and payment reference are required.';
+  end if;
+  if p_amount is null or p_amount <= 0 or p_payment_date is null then
+    raise exception 'Enter a valid payment amount and date.';
+  end if;
+  if p_payment_method is null or p_payment_method not in ('cash', 'bank_transfer', 'mobile_money', 'cheque', 'other') then
+    raise exception 'The selected payment method is not supported.';
+  end if;
+
+  select * into selected_target
+  from public.class_fee_targets
+  where id = p_fee_target_id and status = 'active'
+  for update;
+  if not found then
+    raise exception 'The selected class fee is not active.';
+  end if;
+
+  if not exists (
+    select 1 from public.students
+    where id = p_student_id
+      and current_class_id = selected_target.class_id
+      and academic_year_id = selected_target.academic_year_id
+      and enrollment_status = 'active'
+  ) then
+    raise exception 'The student is not actively enrolled in this class and academic year.';
+  end if;
+
+  select * into existing_payment
+  from public.payments
+  where receipt_number = btrim(p_receipt_number)
+  for update;
+  if found then
+    if existing_payment.student_id = p_student_id
+      and existing_payment.fee_target_id = selected_target.id
+      and existing_payment.invoice_id is null
+      and existing_payment.amount = p_amount
+      and existing_payment.payment_date = p_payment_date
+      and existing_payment.payment_method = p_payment_method
+      and existing_payment.payment_reference = btrim(p_payment_reference)
+      and existing_payment.transaction_reference is not distinct from nullif(btrim(p_transaction_reference), '')
+      and existing_payment.recorded_by = p_recorded_by
+      and existing_payment.notes is not distinct from nullif(btrim(p_notes), '')
+      and existing_payment.status = 'completed' then
+      return existing_payment.id;
+    end if;
+    raise exception 'This receipt number has already been used for a different payment.';
+  end if;
+
+  select coalesce(sum(p.amount), 0) into amount_paid
+  from public.payments p
+  left join public.invoices i on i.id = p.invoice_id
+  where p.student_id = p_student_id
+    and p.status = 'completed'
+    and (
+      p.fee_target_id = selected_target.id
+      or (
+        p.fee_target_id is null
+        and i.class_id = selected_target.class_id
+        and i.academic_year_id = selected_target.academic_year_id
+        and i.term_id = selected_target.term_id
+      )
+      or (
+        p.fee_target_id is null
+        and p.invoice_id is null
+        and p.payment_date between
+          (select start_date from public.terms where id = selected_target.term_id)
+          and (select end_date from public.terms where id = selected_target.term_id)
+      )
+    );
+
+  if p_amount > greatest(0, selected_target.amount - amount_paid) then
+    raise exception 'Payment exceeds the student''s remaining class fee balance.';
+  end if;
+
+  insert into public.payments (
+    id, receipt_number, payment_reference, student_id, invoice_id, fee_target_id, amount,
+    payment_date, payment_method, transaction_reference, recorded_by, notes, status
+  ) values (
+    new_payment_id, btrim(p_receipt_number), btrim(p_payment_reference), p_student_id, null,
+    selected_target.id, p_amount, p_payment_date, p_payment_method,
+    nullif(btrim(p_transaction_reference), ''), p_recorded_by, nullif(btrim(p_notes), ''), 'completed'
+  );
+
+  return new_payment_id;
+end;
+$$;
+
+revoke all on function public.record_class_fee_payment(text, text, text, text, bigint, date, text, text, uuid, text) from public, anon;
+grant execute on function public.record_class_fee_payment(text, text, text, text, bigint, date, text, text, uuid, text) to authenticated;
+
 create or replace function public.reset_school_data()
 returns void
 language plpgsql
@@ -499,6 +725,7 @@ begin
   delete from public.payments;
   delete from public.financial_adjustments;
   delete from public.invoices;
+  delete from public.class_fee_targets;
   delete from public.fee_structures;
   delete from public.fee_categories;
   delete from public.inventory_movements;

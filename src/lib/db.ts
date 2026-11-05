@@ -22,6 +22,7 @@ import {
   ReportCard,
   FeeCategory,
   FeeStructure,
+  ClassFeeTarget,
   Invoice,
   Payment,
   FinancialAdjustment,
@@ -62,6 +63,7 @@ export interface EPSDatabase {
   reportCards: SupabaseTable<ReportCard>;
   feeCategories: SupabaseTable<FeeCategory>;
   feeStructures: SupabaseTable<FeeStructure>;
+  classFeeTargets: SupabaseTable<ClassFeeTarget>;
   invoices: SupabaseTable<Invoice>;
   payments: SupabaseTable<Payment>;
   financialAdjustments: SupabaseTable<FinancialAdjustment>;
@@ -95,6 +97,7 @@ const tableNames: Record<string, string> = {
   reportCards: 'report_cards',
   feeCategories: 'fee_categories',
   feeStructures: 'fee_structures',
+  classFeeTargets: 'class_fee_targets',
   invoices: 'invoices',
   payments: 'payments',
   financialAdjustments: 'financial_adjustments',
@@ -945,6 +948,53 @@ export const dataService = {
     }
   },
 
+  async getClassFeeTargets(): Promise<ClassFeeTarget[]> {
+    return db.classFeeTargets.toArray();
+  },
+
+  async saveClassFeeTarget(input: {
+    classId: string;
+    academicYearId: string;
+    termId: string;
+    amount: number;
+  }): Promise<string> {
+    const { data, error } = await getSupabase().rpc('save_class_fee_target', {
+      p_class_id: input.classId,
+      p_academic_year_id: input.academicYearId,
+      p_term_id: input.termId,
+      p_amount: input.amount,
+    });
+    if (error) throw error;
+    if (typeof data !== 'string') throw new Error('Supabase did not confirm the class fee target.');
+    return data;
+  },
+
+  async deleteClassFeeTarget(id: string): Promise<void> {
+    const client = getSupabase();
+    const linkedPayments = await client
+      .from('payments')
+      .select('id')
+      .eq('fee_target_id', id)
+      .limit(1);
+    if (linkedPayments.error) throw linkedPayments.error;
+    if (linkedPayments.data?.length) {
+      throw new Error('This fee target has payment history and cannot be deleted. Edit its amount instead to preserve the records.');
+    }
+    const { data, error } = await client
+      .from('class_fee_targets')
+      .delete()
+      .eq('id', id)
+      .select('id')
+      .maybeSingle();
+    if (error) {
+      if (error.code === '23503') {
+        throw new Error('This fee target has payment history and cannot be deleted. Edit its amount instead to preserve the records.');
+      }
+      throw error;
+    }
+    if (!data) throw new Error('The fee target was not deleted. Check that it exists and your account has permission.');
+  },
+
   async promoteStudents(input: {
     studentIds: string[];
     sourceClassId: string;
@@ -1554,6 +1604,26 @@ export const dataService = {
       p_payment_reference: payment.paymentReference,
       p_student_id: payment.studentId,
       p_invoice_id: payment.invoiceId || null,
+      p_amount: payment.amount,
+      p_payment_date: payment.paymentDate,
+      p_payment_method: payment.paymentMethod,
+      p_transaction_reference: payment.transactionReference || null,
+      p_recorded_by: payment.recordedBy,
+      p_notes: payment.notes || null,
+    });
+    if (error) throw error;
+    if (typeof data !== 'string') throw new Error('Supabase did not confirm the payment record.');
+    return data;
+  },
+
+  async recordClassFeePayment(payment: Omit<Payment, 'id' | 'createdAt' | 'updatedAt'> & {
+    feeTargetId: string;
+  }): Promise<string> {
+    const { data, error } = await getSupabase().rpc('record_class_fee_payment', {
+      p_receipt_number: payment.receiptNumber,
+      p_payment_reference: payment.paymentReference,
+      p_student_id: payment.studentId,
+      p_fee_target_id: payment.feeTargetId,
       p_amount: payment.amount,
       p_payment_date: payment.paymentDate,
       p_payment_method: payment.paymentMethod,
