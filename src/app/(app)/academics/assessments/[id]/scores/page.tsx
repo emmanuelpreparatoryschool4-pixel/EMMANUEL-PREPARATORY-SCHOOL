@@ -33,19 +33,14 @@ export default function AssessmentScoresPage() {
 					return;
 				}
 
-				const [classStudents, savedScores, assessmentTypes] = await Promise.all([
+				const [classStudents, savedScores] = await Promise.all([
 					dataService.getStudentsForClassTerm(result.classId, result.academicYearId, result.termId),
 					dataService.getAssessmentScores(id),
-					dataService.getAssessmentTypes(),
 				]);
 
 				if (cancelled) return;
 				const savedByStudent = new Map(savedScores.map((score) => [score.studentId, score.score]));
-				const type = assessmentTypes.find((assessmentType) => assessmentType.id === result.assessmentTypeId);
-				setAssessment({
-					...result,
-					weight: type?.name.toLowerCase().includes('exam') ? 70 : 30,
-				});
+				setAssessment(result);
 				setStudents(classStudents);
 				setScores(
 					Object.fromEntries(
@@ -80,7 +75,7 @@ export default function AssessmentScoresPage() {
 			}
 
 			const score = Number(value);
-			if (!Number.isFinite(score) || score < 0 || score > assessment.maxScore || score > 100) {
+			if (!Number.isFinite(score) || score < 0 || score > assessment.maxScore) {
 				addToast({
 					type: 'error',
 					title: 'Check the scores',

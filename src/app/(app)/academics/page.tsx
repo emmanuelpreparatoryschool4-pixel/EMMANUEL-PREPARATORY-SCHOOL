@@ -2,20 +2,24 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, ClipboardList, Users, School as SchoolIcon, BookOpen, Printer } from 'lucide-react';
+import { Plus, ClipboardList, Users, School as SchoolIcon, BookOpen, Printer, Save } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { Select } from '@/components/ui/Select';
 import { Tabs } from '@/components/ui/Tabs';
+import { useToast } from '@/contexts/ToastContext';
 import { dataService } from '@/lib/db';
 import { AcademicYear, Assessment, AssessmentType, Class, ReportCard, Student, Subject, Term } from '@/types';
-import { formatDate } from '@/lib/utils';
+import { formatDate, getErrorMessage } from '@/lib/utils';
 import { ResultsPanel } from './ResultsPanel';
 import { AcademicConfigurationPanel } from './AcademicConfigurationPanel';
+import { AssessmentTypesPanel } from './AssessmentTypesPanel';
 
 export default function AcademicsPage() {
   const router = useRouter();
+  const { addToast } = useToast();
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [assessmentTypes, setAssessmentTypes] = useState<AssessmentType[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -25,6 +29,13 @@ export default function AcademicsPage() {
   const [terms, setTerms] = useState<Term[]>([]);
   const [reportCards, setReportCards] = useState<ReportCard[]>([]);
   const [activeTab, setActiveTab] = useState('overview');
+  const [editingAssessment, setEditingAssessment] = useState<Assessment | null>(null);
+  const [assessmentForm, setAssessmentForm] = useState({ name: '', maxScore: '', weight: '', date: '' });
+  const [canEditAssessmentCalculation, setCanEditAssessmentCalculation] = useState(true);
+  const [savingAssessment, setSavingAssessment] = useState(false);
+  const [assessmentYearFilter, setAssessmentYearFilter] = useState('');
+  const [assessmentTermFilter, setAssessmentTermFilter] = useState('');
+  const [assessmentClassFilter, setAssessmentClassFilter] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -56,9 +67,8 @@ export default function AcademicsPage() {
     { id: 'overview', label: 'Overview' },
     { id: 'assessments', label: 'Assessments', count: assessments.length },
     { id: 'types', label: 'Assessment Types', count: assessmentTypes.length },
-    { id: 'subjects', label: 'Subjects', count: subjects.length },
     { id: 'configuration', label: 'Academic Configuration' },
-    { id: 'reports', label: 'Class Results' },
+    { id: 'results', label: 'Class Results' },
   ];
 
   if (isLoading) return <div className="h-64 animate-pulse rounded-xl bg-gray-200" />;
@@ -68,6 +78,11 @@ export default function AcademicsPage() {
 
   const subjectMap: Record<string, string> = {};
   subjects.forEach((s) => { subjectMap[s.id] = s.name; });
+  const filteredAssessments = assessments.filter((assessment) =>
+    (!assessmentYearFilter || assessment.academicYearId === assessmentYearFilter) &&
+    (!assessmentTermFilter || assessment.termId === assessmentTermFilter) &&
+    (!assessmentClassFilter || assessment.classId === assessmentClassFilter)
+  );
   const currentYear = academicYears.find((year) => year.isCurrent) ?? academicYears[0];
   const currentTerm = terms.find((term) => term.isCurrent && term.academicYearId === currentYear?.id) ??
     terms.find((term) => term.academicYearId === currentYear?.id);
@@ -78,6 +93,10 @@ export default function AcademicsPage() {
   const currentReportCards = reportCards.filter((card) =>
     card.academicYearId === currentYear?.id && card.termId === currentTerm?.id
   );
+  const currentAssessments = assessments.filter((assessment) =>
+    assessment.academicYearId === currentYear?.id && assessment.termId === currentTerm?.id
+  );
+  const completedAssessments = currentAssessments.filter((assessment) => assessment.status === 'graded').length;
   const publishedCount = currentReportCards.filter((card) => card.status === 'published').length;
   const reviewCount = currentReportCards.filter((card) => card.status === 'ready_for_review').length;
   const completeCount = new Set(currentReportCards.map((card) => card.studentId)).size;
@@ -106,6 +125,63 @@ export default function AcademicsPage() {
             : 'Not started',
     };
   });
+
+  const editAssessment = async (assessment: Assessment) => {
+    try {
+      const savedScores = await dataService.getAssessmentScores(assessment.id);
+      const calculationLocked = savedScores.length > 0 || reportCards.some((card) =>
+        card.classId === assessment.classId &&
+        card.academicYearId === assessment.academicYearId &&
+        card.termId === assessment.termId &&
+        card.status === 'published'
+      );
+      if (calculationLocked) {
+        addToast({
+          type: 'error',
+          title: 'Assessment calculation is locked',
+          message: 'Maximum score and weight cannot be changed after scores are saved or report cards are published.',
+        });
+      }
+      setCanEditAssessmentCalculation(!calculationLocked);
+      setEditingAssessment(assessment);
+      setAssessmentForm({
+        name: assessment.name,
+        maxScore: String(assessment.maxScore),
+        weight: String(assessment.weight),
+        date: assessment.date,
+      });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Could not open assessment', message: getErrorMessage(error, 'Assessment details are unavailable.') });
+    }
+  };
+
+  const saveAssessment = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingAssessment) return;
+    const maxScore = Number(assessmentForm.maxScore);
+    const weight = Number(assessmentForm.weight);
+    if (!assessmentForm.name.trim() || !Number.isFinite(maxScore) || maxScore <= 0 ||
+      !Number.isFinite(weight) || weight <= 0 || weight > 100 || !assessmentForm.date) {
+      addToast({ type: 'error', title: 'Check the assessment details', message: 'Enter a name, positive maximum score, contribution from 0 to 100, and date.' });
+      return;
+    }
+    setSavingAssessment(true);
+    try {
+      await dataService.updateAssessment(editingAssessment.id, {
+        name: assessmentForm.name.trim(),
+        date: assessmentForm.date,
+        ...(canEditAssessmentCalculation ? { maxScore, weight } : {}),
+      });
+      const updated = await dataService.getAssessments();
+      setAssessments(updated);
+      setEditingAssessment(null);
+      addToast({ type: 'success', title: 'Assessment updated' });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Could not update assessment', message: getErrorMessage(error, 'The assessment was not changed.') });
+    } finally {
+      setSavingAssessment(false);
+    }
+  };
 
   return (
     <div>
@@ -137,7 +213,7 @@ export default function AcademicsPage() {
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {[
-              ['Complete report cards', completeCount],
+              ['Completed assessments', completedAssessments],
               ['Incomplete results', Math.max(0, currentStudents.length - completeCount)],
               ['Awaiting publication', reviewCount],
               ['Published report cards', publishedCount],
@@ -183,8 +259,8 @@ export default function AcademicsPage() {
             </CardContent>
           </Card>
           <div className="flex flex-wrap gap-3">
-            <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => router.push('/academics/assessments/new')}>Results entry</Button>
-            <Button variant="outline" leftIcon={<Printer className="h-4 w-4" />} onClick={() => setActiveTab('reports')}>Class results</Button>
+            <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => router.push('/academics/assessments/new')}>Create assessment</Button>
+            <Button variant="outline" leftIcon={<Printer className="h-4 w-4" />} onClick={() => setActiveTab('results')}>Class results</Button>
             <Button variant="outline" onClick={() => setActiveTab('configuration')}>Academic configuration</Button>
           </div>
         </div>
@@ -192,8 +268,53 @@ export default function AcademicsPage() {
 
       {activeTab === 'assessments' && (
         <Card>
-          <CardHeader><CardTitle>Assessments</CardTitle></CardHeader>
+          <CardHeader>
+            <div>
+              <CardTitle>Assessments</CardTitle>
+              <p className="text-sm text-gray-500">Each assessment is linked to its class, subject, term, and configured contribution.</p>
+            </div>
+          </CardHeader>
           <CardContent>
+            <div className="mb-5 grid gap-3 md:grid-cols-3">
+              <Select
+                label="Academic year"
+                options={[{ value: '', label: 'All academic years' }, ...academicYears.map((year) => ({ value: year.id, label: year.name }))]}
+                value={assessmentYearFilter}
+                onChange={(event) => {
+                  setAssessmentYearFilter(event.target.value);
+                  setAssessmentTermFilter('');
+                  setAssessmentClassFilter('');
+                }}
+              />
+              <Select
+                label="Term"
+                options={[{ value: '', label: 'All terms' }, ...terms
+                  .filter((term) => !assessmentYearFilter || term.academicYearId === assessmentYearFilter)
+                  .map((term) => ({ value: term.id, label: term.name }))]}
+                value={assessmentTermFilter}
+                onChange={(event) => setAssessmentTermFilter(event.target.value)}
+              />
+              <Select
+                label="Class"
+                options={[{ value: '', label: 'All classes' }, ...classes
+                  .filter((schoolClass) => !assessmentYearFilter || schoolClass.academicYearId === assessmentYearFilter)
+                  .map((schoolClass) => ({ value: schoolClass.id, label: `${schoolClass.name}${schoolClass.stream ? ` - ${schoolClass.stream}` : ''}` }))]}
+                value={assessmentClassFilter}
+                onChange={(event) => setAssessmentClassFilter(event.target.value)}
+              />
+            </div>
+            {editingAssessment && (
+              <form onSubmit={saveAssessment} className="mb-5 grid gap-3 rounded-lg border p-4 md:grid-cols-2 lg:grid-cols-5">
+                <input aria-label="Assessment name" required value={assessmentForm.name} onChange={(event) => setAssessmentForm((current) => ({ ...current, name: event.target.value }))} className="min-h-11 rounded-md border px-3 text-sm" />
+                <input aria-label="Maximum score" type="number" min="0.01" step="0.01" required disabled={!canEditAssessmentCalculation} value={assessmentForm.maxScore} onChange={(event) => setAssessmentForm((current) => ({ ...current, maxScore: event.target.value }))} className="min-h-11 rounded-md border px-3 text-sm disabled:bg-gray-100" />
+                <input aria-label="Contribution percentage" type="number" min="0.01" max="100" step="0.01" required disabled={!canEditAssessmentCalculation} value={assessmentForm.weight} onChange={(event) => setAssessmentForm((current) => ({ ...current, weight: event.target.value }))} className="min-h-11 rounded-md border px-3 text-sm disabled:bg-gray-100" />
+                <input aria-label="Assessment date" type="date" required value={assessmentForm.date} onChange={(event) => setAssessmentForm((current) => ({ ...current, date: event.target.value }))} className="min-h-11 rounded-md border px-3 text-sm" />
+                <div className="flex gap-2">
+                  <Button type="submit" isLoading={savingAssessment} leftIcon={<Save className="h-4 w-4" />}>Save</Button>
+                  <Button type="button" variant="outline" onClick={() => setEditingAssessment(null)}>Cancel</Button>
+                </div>
+              </form>
+            )}
             {assessments.length === 0 ? (
               <div className="py-12 text-center">
                 <ClipboardList className="mx-auto h-10 w-10 text-gray-300" />
@@ -204,65 +325,45 @@ export default function AcademicsPage() {
                 </Button>
               </div>
             ) : (
-              <div className="space-y-3">
-                {assessments.map((a) => (
-                  <div key={a.id} className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
-                    <div>
-                      <p className="font-medium text-gray-900">{a.name}</p>
-                      <p className="text-sm text-gray-500">
-                        {typeMap[a.assessmentTypeId]} · {subjectMap[a.subjectId]} · Max: {a.maxScore}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-500">{formatDate(a.date)}</p>
-                      <Button variant="ghost" size="sm" onClick={() => router.push(`/academics/assessments/${a.id}/scores`)}>
-                        Enter Scores
-                      </Button>
-                    </div>
-                  </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50"><tr>
+                    {['Assessment', 'Year · Term', 'Class', 'Subject · Type', 'Maximum', 'Weight', 'Status', 'Actions'].map((heading) => (
+                      <th key={heading} className="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">{heading}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody className="divide-y divide-gray-100 bg-white">
+                {filteredAssessments.map((a) => (
+                  <tr key={a.id}>
+                    <td className="px-3 py-3 text-sm font-medium">{a.name}<p className="text-xs text-gray-500">{formatDate(a.date)}</p></td>
+                    <td className="px-3 py-3 text-sm">{academicYears.find((year) => year.id === a.academicYearId)?.name ?? '—'} · {terms.find((term) => term.id === a.termId)?.name ?? '—'}</td>
+                    <td className="px-3 py-3 text-sm">{classes.find((schoolClass) => schoolClass.id === a.classId)?.name ?? '—'}</td>
+                    <td className="px-3 py-3 text-sm">{subjectMap[a.subjectId] ?? '—'} · {typeMap[a.assessmentTypeId] ?? '—'}</td>
+                    <td className="px-3 py-3 text-sm">{a.maxScore}</td>
+                    <td className="px-3 py-3 text-sm">{a.weight}%</td>
+                    <td className="px-3 py-3"><Badge variant="status" status={a.status}>{a.status}</Badge></td>
+                    <td className="px-3 py-3 text-right">
+                      <div className="inline-flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => void editAssessment(a)}>Edit</Button>
+                        <Button variant="ghost" size="sm" onClick={() => router.push(`/academics/assessments/${a.id}/scores`)}>Assessment scores</Button>
+                      </div>
+                    </td>
+                  </tr>
                 ))}
+                    {!filteredAssessments.length && (
+                      <tr><td colSpan={8} className="px-3 py-8 text-center text-sm text-gray-500">No assessments match these filters.</td></tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             )}
           </CardContent>
         </Card>
       )}
 
-      {activeTab === 'types' && (
-        <Card>
-          <CardHeader><CardTitle>Assessment Types</CardTitle></CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {assessmentTypes.map((t) => (
-                <div key={t.id} className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
-                  <div>
-                    <p className="font-medium text-gray-900">{t.name}</p>
-                    <p className="text-sm text-gray-500">Default weight: {t.defaultWeight}% · Max score: {t.defaultMaxScore}</p>
-                  </div>
-                  <Badge variant="status" status={t.status}>{t.status}</Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {activeTab === 'types' && <AssessmentTypesPanel />}
 
-      {activeTab === 'subjects' && (
-        <Card>
-          <CardHeader><CardTitle>Subjects</CardTitle></CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {subjects.map((s) => (
-                <div key={s.id} className="rounded-lg border border-gray-200 p-4">
-                  <p className="font-medium text-gray-900">{s.name}</p>
-                  <p className="text-sm text-gray-500">Code: {s.code}</p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {activeTab === 'reports' && (
+      {activeTab === 'results' && (
         <ResultsPanel />
       )}
 

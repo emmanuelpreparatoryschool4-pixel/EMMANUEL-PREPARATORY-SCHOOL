@@ -118,8 +118,8 @@ export const assessmentSchema = z.object({
   subjectId: z.string().min(1, 'Subject is required'),
   termId: z.string().min(1, 'Term is required'),
   academicYearId: z.string().min(1, 'Academic year is required'),
-  maxScore: z.number().min(1, 'Maximum score must be at least 1').max(100, 'Maximum score cannot exceed 100'),
-  weight: z.number().min(1).max(100, 'Weight must be between 1 and 100'),
+  maxScore: z.number().positive('Maximum score must be greater than zero'),
+  weight: z.number().min(0.01, 'Contribution must be greater than zero').max(100, 'Weight must be between 0.01 and 100'),
   date: z.string().min(1, 'Date is required'),
 });
 

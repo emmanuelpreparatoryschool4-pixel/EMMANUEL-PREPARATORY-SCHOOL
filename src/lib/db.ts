@@ -1385,12 +1385,31 @@ export const dataService = {
   async addGradingScale(name: string, grades: Grade[]): Promise<string> {
     const now = new Date().toISOString();
     const id = generateId();
-    await db.gradingScales.add({ id, name, grades, isDefault: true, createdAt: now, updatedAt: now });
+    await db.gradingScales.add({
+      id,
+      name,
+      grades,
+      calculationRules: { rankingMethod: 'competition' },
+      isDefault: true,
+      createdAt: now,
+      updatedAt: now,
+    });
     return id;
   },
 
-  async updateGradingScale(id: string, data: Pick<GradingScale, 'name' | 'grades'>): Promise<void> {
+  async updateGradingScale(id: string, data: Pick<GradingScale, 'name' | 'grades' | 'calculationRules'>): Promise<void> {
     await db.gradingScales.update(id, { ...data, updatedAt: new Date().toISOString() });
+  },
+
+  async addAssessmentType(data: Omit<AssessmentType, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+    const now = new Date().toISOString();
+    const id = generateId();
+    await db.assessmentTypes.add({ ...data, id, createdAt: now, updatedAt: now });
+    return id;
+  },
+
+  async updateAssessmentType(id: string, data: Partial<AssessmentType>): Promise<void> {
+    await db.assessmentTypes.update(id, { ...data, updatedAt: new Date().toISOString() });
   },
 
   async addSubject(subject: Omit<Subject, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
@@ -1415,6 +1434,10 @@ export const dataService = {
     return id;
   },
 
+  async updateAssessment(id: string, data: Partial<Assessment>): Promise<void> {
+    await db.assessments.update(id, { ...data, updatedAt: new Date().toISOString() });
+  },
+
   // Assessment scores
   async getAssessment(id: string): Promise<Assessment | undefined> {
     return db.assessments.get(id);
@@ -1422,6 +1445,16 @@ export const dataService = {
 
   async getAssessmentScores(assessmentId: string): Promise<AssessmentScore[]> {
     return db.assessmentScores.where('assessmentId').equals(assessmentId).toArray();
+  },
+
+  async getAssessmentScoresForAssessments(assessmentIds: string[]): Promise<AssessmentScore[]> {
+    if (!assessmentIds.length) return [];
+    const { data, error } = await getSupabase()
+      .from('assessment_scores')
+      .select('*')
+      .in('assessment_id', assessmentIds);
+    if (error) throw error;
+    return fromDatabase<AssessmentScore[]>(data ?? [], 'assessment_scores');
   },
 
   async getAssessmentScoresForStudent(studentId: string): Promise<AssessmentScore[]> {
@@ -1439,18 +1472,10 @@ export const dataService = {
     reportCards: Array<Omit<ReportCard, 'id' | 'createdAt' | 'updatedAt'>>
   ): Promise<void> {
     if (!reportCards.length) return;
-    const existingCards = await db.reportCards.toArray();
-    const existingByKey = new Map(existingCards.map((card) => [`${card.studentId}:${card.termId}`, card]));
-    const now = new Date().toISOString();
-    await db.reportCards.bulkPut(reportCards.map((card) => {
-      const existing = existingByKey.get(`${card.studentId}:${card.termId}`);
-      return {
-        ...card,
-        id: existing?.id ?? generateId(),
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
-      };
-    }));
+    const { error } = await getSupabase().rpc('save_report_cards', {
+      p_report_cards: toDatabase(reportCards, 'report_cards'),
+    });
+    if (error) throw error;
   },
 
   async saveAssessmentScores(
@@ -1458,62 +1483,25 @@ export const dataService = {
     scores: Array<{ studentId: string; score: number | null }>,
     updateAssessmentStatus = true
   ): Promise<void> {
-    const assessment = await db.assessments.get(assessmentId);
-    if (!assessment) throw new Error('Assessment not found.');
+    const { error } = await getSupabase().rpc('save_assessment_scores', {
+      p_assessment_id: assessmentId,
+      p_scores: scores,
+      p_update_assessment_status: updateAssessmentStatus,
+    });
+    if (error) throw error;
+  },
 
-    const classStudents = await this.getStudentsForClassTerm(
-      assessment.classId,
-      assessment.academicYearId,
-      assessment.termId
-    );
-    const validStudentIds = new Set(classStudents.map((student) => student.id));
-    if (scores.some((entry) => !validStudentIds.has(entry.studentId))) {
-      throw new Error('Scores can only be recorded for students enrolled in the assessment class for that term.');
-    }
-
-    const schoolClass = await db.classes.get(assessment.classId);
-    if (schoolClass?.subjectIds?.length && !schoolClass.subjectIds.includes(assessment.subjectId)) {
-      throw new Error('The assessment subject is not assigned to its class.');
-    }
-
-    const existingScores = await db.assessmentScores.where('assessmentId').equals(assessmentId).toArray();
-    const existingByStudent = new Map(existingScores.map((score) => [score.studentId, score]));
-    const now = new Date().toISOString();
-    const scoresToSave: AssessmentScore[] = [];
-    const scoreIdsToDelete: string[] = [];
-
-    for (const entry of scores) {
-      const existing = existingByStudent.get(entry.studentId);
-      if (entry.score === null) {
-        if (existing) scoreIdsToDelete.push(existing.id);
-        continue;
-      }
-
-      if (!Number.isFinite(entry.score) || entry.score < 0 || entry.score > 100 || entry.score > assessment.maxScore) {
-        throw new Error('Scores must be between zero and 100 and cannot exceed the assessment maximum.');
-      }
-
-      scoresToSave.push({
-        id: existing?.id ?? generateId(),
-        assessmentId,
-        studentId: entry.studentId,
-        score: entry.score,
-        status: 'submitted',
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
-      });
-    }
-
-    if (scoresToSave.length) await db.assessmentScores.bulkPut(scoresToSave);
-    if (scoreIdsToDelete.length) await db.assessmentScores.bulkDelete(scoreIdsToDelete);
-
-    if (updateAssessmentStatus) {
-      const isComplete = scores.length > 0 && scores.every((entry) => entry.score !== null);
-      await db.assessments.update(assessmentId, {
-        status: isComplete ? 'graded' : 'open',
-        updatedAt: now,
-      });
-    }
+  async saveStudentAssessmentScores(
+    studentId: string,
+    scores: Array<{ assessmentId: string; score: number | null }>,
+    status: 'draft' | 'submitted' = 'submitted'
+  ): Promise<void> {
+    const { error } = await getSupabase().rpc('save_student_assessment_scores', {
+      p_student_id: studentId,
+      p_scores: scores,
+      p_status: status,
+    });
+    if (error) throw error;
   },
 
   // Invoices

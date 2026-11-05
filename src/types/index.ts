@@ -98,9 +98,14 @@ export interface GradingScale {
   id: string;
   name: string;
   grades: Grade[];
+  calculationRules?: AcademicCalculationRules;
   isDefault: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AcademicCalculationRules {
+  rankingMethod: 'competition' | 'dense' | 'ordinal';
 }
 
 export interface Grade {
@@ -387,7 +392,19 @@ export interface ReportCard {
   teacherComment?: string;
   headteacherComment?: string;
   promotionDecision?: string;
+  overallGrade?: string;
+  overallRemark?: string;
   status: 'draft' | 'ready_for_review' | 'published';
+  calculationSnapshot?: {
+    version: number;
+    rankingMethod: AcademicCalculationRules['rankingMethod'];
+    capturedAt: string;
+    gradingScaleId?: string;
+    gradingScale?: {
+      name: string;
+      grades: Grade[];
+    };
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -395,12 +412,21 @@ export interface ReportCard {
 export interface ReportCardSubject {
   subjectId: string;
   subjectName: string;
-  classScore: number;
-  examScore: number;
+  classScore?: number;
+  examScore?: number;
   totalScore: number;
   grade: string;
   remark: string;
   position?: number;
+  components?: Array<{
+    assessmentId: string;
+    assessmentName: string;
+    assessmentTypeName: string;
+    score: number;
+    maxScore: number;
+    weight: number;
+    weightedScore: number;
+  }>;
 }
 
 // ============================================

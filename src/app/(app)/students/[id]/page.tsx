@@ -323,6 +323,7 @@ export default function StudentProfilePage() {
                 </div>
                 <div className="text-right text-sm">
                   <p className="font-semibold">{card.averageScore.toFixed(2)} average</p>
+                  {card.overallGrade && <p>{card.overallGrade}{card.overallRemark ? ` · ${card.overallRemark}` : ''}</p>}
                   <p className="text-gray-500">{card.position ? `Position ${card.position}` : 'Position not recorded'}</p>
                 </div>
               </CardHeader>
@@ -331,8 +332,7 @@ export default function StudentProfilePage() {
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50"><tr>
                       <th className="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500">Subject</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium uppercase text-gray-500">Assessment /30</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium uppercase text-gray-500">Exam /70</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500">Assessment components</th>
                       <th className="px-3 py-2 text-right text-xs font-medium uppercase text-gray-500">Final /100</th>
                       <th className="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500">Grade / remark</th>
                     </tr></thead>
@@ -340,15 +340,20 @@ export default function StudentProfilePage() {
                       {card.subjects.map((subject) => (
                         <tr key={subject.subjectId}>
                           <td className="px-3 py-2 text-sm">{subject.subjectName}</td>
-                          <td className="px-3 py-2 text-right text-sm">{subject.classScore.toFixed(2)}</td>
-                          <td className="px-3 py-2 text-right text-sm">{subject.examScore.toFixed(2)}</td>
+                          <td className="px-3 py-2 text-sm">
+                            {subject.components?.length
+                              ? subject.components.map((component) => `${component.assessmentName}: ${component.score}/${component.maxScore}`).join(' · ')
+                              : subject.classScore !== undefined || subject.examScore !== undefined
+                                ? `Earlier result: ${subject.classScore?.toFixed(2) ?? '—'} / ${subject.examScore?.toFixed(2) ?? '—'}`
+                                : '—'}
+                          </td>
                           <td className="px-3 py-2 text-right text-sm font-medium">{subject.totalScore.toFixed(2)}</td>
                           <td className="px-3 py-2 text-sm">{subject.grade} · {subject.remark}</td>
                         </tr>
                       ))}
                       <tr className="bg-gray-50 font-semibold">
                         <td className="px-3 py-2 text-sm">Total</td>
-                        <td colSpan={2} className="px-3 py-2 text-right text-sm">{card.subjects.length} subject(s)</td>
+                        <td className="px-3 py-2 text-right text-sm">{card.subjects.length} subject(s)</td>
                         <td className="px-3 py-2 text-right text-sm">{card.totalScore.toFixed(2)}</td>
                         <td className="px-3 py-2" />
                       </tr>
@@ -565,14 +570,19 @@ export default function StudentProfilePage() {
             </div>
             <table className="w-full border-collapse text-sm">
               <thead><tr className="border-y">
-                <th className="p-2 text-left">Subject</th><th className="p-2 text-right">Assessment /30</th>
-                <th className="p-2 text-right">Exam /70</th><th className="p-2 text-right">Total /100</th>
+                <th className="p-2 text-left">Subject</th><th className="p-2 text-left">Assessment components</th>
+                <th className="p-2 text-right">Total /100</th>
                 <th className="p-2 text-left">Grade</th><th className="p-2 text-left">Remark</th>
               </tr></thead>
               <tbody>{selectedReportCard.subjects.map((subject) => (
                 <tr key={subject.subjectId} className="border-b">
-                  <td className="p-2">{subject.subjectName}</td><td className="p-2 text-right">{subject.classScore.toFixed(2)}</td>
-                  <td className="p-2 text-right">{subject.examScore.toFixed(2)}</td><td className="p-2 text-right">{subject.totalScore.toFixed(2)}</td>
+                  <td className="p-2">{subject.subjectName}</td>
+                  <td className="p-2">{subject.components?.length
+                    ? subject.components.map((component) => `${component.assessmentName}: ${component.score}/${component.maxScore}`).join(' · ')
+                    : subject.classScore !== undefined || subject.examScore !== undefined
+                      ? `Earlier result: ${subject.classScore?.toFixed(2) ?? '—'} / ${subject.examScore?.toFixed(2) ?? '—'}`
+                      : '—'}</td>
+                  <td className="p-2 text-right">{subject.totalScore.toFixed(2)}</td>
                   <td className="p-2">{subject.grade}</td><td className="p-2">{subject.remark}</td>
                 </tr>
               ))}</tbody>

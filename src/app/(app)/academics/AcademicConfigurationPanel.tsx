@@ -5,10 +5,11 @@ import type { FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { useToast } from '@/contexts/ToastContext';
 import { dataService } from '@/lib/db';
 import { getErrorMessage } from '@/lib/utils';
-import { AcademicYear, Grade, GradingScale, Subject, Term } from '@/types';
+import { AcademicCalculationRules, AcademicYear, Class, Grade, GradingScale, Subject, Term } from '@/types';
 
 interface PeriodForm {
   id: string;
@@ -25,6 +26,7 @@ function fetchAcademicConfiguration() {
     dataService.getTerms(),
     dataService.getDefaultGradingScale(),
     dataService.getSubjects(),
+    dataService.getClasses(),
   ]);
 }
 
@@ -42,17 +44,28 @@ export function AcademicConfigurationPanel() {
   const [gradingScaleName, setGradingScaleName] = useState('');
   const [grades, setGrades] = useState<Grade[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [subjectClassId, setSubjectClassId] = useState('');
+  const [subjectAssignmentDraft, setSubjectAssignmentDraft] = useState<string[] | null>(null);
+  const [rankingMethod, setRankingMethod] = useState<AcademicCalculationRules['rankingMethod']>('competition');
   const [subjectForm, setSubjectForm] = useState({ id: '', name: '', code: '', description: '' });
   const [isLoading, setIsLoading] = useState(true);
   const [busyAction, setBusyAction] = useState('');
+  const selectedSubjectClass = classes.find((schoolClass) => schoolClass.id === subjectClassId);
+  const classSubjectIds = subjectAssignmentDraft ?? selectedSubjectClass?.subjectIds ?? [];
 
-  const applyConfiguration = useCallback(([loadedYears, loadedTerms, loadedScale, loadedSubjects]: Awaited<ReturnType<typeof fetchAcademicConfiguration>>) => {
+  const applyConfiguration = useCallback(([loadedYears, loadedTerms, loadedScale, loadedSubjects, loadedClasses]: Awaited<ReturnType<typeof fetchAcademicConfiguration>>) => {
     setYears(loadedYears);
     setTerms(loadedTerms);
     setSubjects(loadedSubjects.sort((a, b) => a.name.localeCompare(b.name)));
+    setClasses(loadedClasses);
+    setSubjectClassId((current) => loadedClasses.some((schoolClass) => schoolClass.id === current)
+      ? current
+      : loadedClasses[0]?.id ?? '');
     setGradingScale(loadedScale);
     setGradingScaleName(loadedScale?.name ?? '');
     setGrades(loadedScale?.grades.map((grade) => ({ ...grade })) ?? []);
+    setRankingMethod(loadedScale?.calculationRules?.rankingMethod ?? 'competition');
     setSelectedYearId((current) =>
       loadedYears.some((year) => year.id === current)
         ? current
@@ -266,14 +279,59 @@ export function AcademicConfigurationPanel() {
     setBusyAction('grades-save');
     try {
       if (gradingScale) {
-        await dataService.updateGradingScale(gradingScale.id, { name: gradingScaleName.trim(), grades: ordered });
+        await dataService.updateGradingScale(gradingScale.id, {
+          name: gradingScaleName.trim(),
+          grades: ordered,
+          calculationRules: { rankingMethod },
+        });
       } else {
         await dataService.addGradingScale(gradingScaleName.trim(), ordered);
+        const createdScale = await dataService.getDefaultGradingScale();
+        if (createdScale) {
+          await dataService.updateGradingScale(createdScale.id, {
+            name: gradingScaleName.trim(),
+            grades: ordered,
+            calculationRules: { rankingMethod },
+          });
+        }
       }
+
       await reload();
       notify('Grading boundaries saved.', 'success');
     } catch (error) {
       notify(getErrorMessage(error, 'Could not save grading boundaries.'), 'error');
+    } finally {
+      setBusyAction('');
+    }
+  }
+
+  async function saveClassSubjects() {
+    const schoolClass = classes.find((item) => item.id === subjectClassId);
+    if (!schoolClass) return;
+    setBusyAction('class-subjects');
+    try {
+      const currentSubjectIds = [...(schoolClass.subjectIds ?? [])].sort();
+      const nextSubjectIds = [...classSubjectIds].sort();
+      const changesAssignments = currentSubjectIds.join(':') !== nextSubjectIds.join(':');
+      if (changesAssignments) {
+        const [classAssessments, reportCards] = await Promise.all([
+          dataService.getAssessments(),
+          dataService.getReportCards(),
+        ]);
+        const matchingAssessments = classAssessments.filter((assessment) => assessment.classId === schoolClass.id);
+        const savedScores = await dataService.getAssessmentScoresForAssessments(matchingAssessments.map((assessment) => assessment.id));
+        if (savedScores.length || reportCards.some((card) =>
+          card.classId === schoolClass.id && card.status === 'published'
+        )) {
+          throw new Error('Subjects cannot be changed after scores are saved or report cards are published for this class.');
+        }
+      }
+      await dataService.updateClass(schoolClass.id, { subjectIds: classSubjectIds });
+      setSubjectAssignmentDraft(null);
+      await reload();
+      notify(`Subjects updated for ${schoolClass.name}.`, 'success');
+    } catch (error) {
+      notify(getErrorMessage(error, 'Could not save class subjects.'), 'error');
     } finally {
       setBusyAction('');
     }
@@ -415,6 +473,16 @@ export function AcademicConfigurationPanel() {
               <Input label="Grading scale name" required value={gradingScaleName}
                 onChange={(event) => setGradingScaleName(event.target.value)} />
               <p className="text-sm text-gray-500">Configure the score ranges used for grades and remarks. Ranges must not overlap.</p>
+              <Select
+                label="Class ranking rule"
+                options={[
+                  { value: 'competition', label: 'Competition (1, 1, 3)' },
+                  { value: 'dense', label: 'Dense (1, 1, 2)' },
+                  { value: 'ordinal', label: 'Ordinal (1, 2, 3)' },
+                ]}
+                value={rankingMethod}
+                onChange={(event) => setRankingMethod(event.target.value as AcademicCalculationRules['rankingMethod'])}
+              />
               <div className="space-y-3">
                 {grades.map((grade, index) => (
                   <div key={`${grade.grade}-${index}`} className="grid gap-3 sm:grid-cols-5">
@@ -477,6 +545,55 @@ export function AcademicConfigurationPanel() {
               </div>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Class subject assignments</CardTitle>
+          <p className="text-sm text-gray-500">These subjects appear in the class score register and report cards.</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!classes.length ? (
+            <p className="text-sm text-gray-500">Create a class before assigning subjects.</p>
+          ) : (
+            <>
+              <Select
+                label="Class"
+                options={classes.map((schoolClass) => ({
+                  value: schoolClass.id,
+                  label: `${schoolClass.name}${schoolClass.stream ? ` - ${schoolClass.stream}` : ''}`,
+                }))}
+                value={subjectClassId}
+                onChange={(event) => {
+                  const classId = event.target.value;
+                  setSubjectClassId(classId);
+                  setSubjectAssignmentDraft(null);
+                }}
+              />
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {subjects.filter((subject) => subject.status === 'active').map((subject) => (
+                  <label key={subject.id} className="flex items-center gap-2 rounded-lg border p-3 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={classSubjectIds.includes(subject.id)}
+                      onChange={(event) => setSubjectAssignmentDraft(event.target.checked
+                        ? [...classSubjectIds, subject.id]
+                        : classSubjectIds.filter((id) => id !== subject.id)
+                      )}
+                    />
+                    {subject.name}
+                  </label>
+                ))}
+                {!subjects.some((subject) => subject.status === 'active') && (
+                  <p className="text-sm text-gray-500">Add and activate subjects above first.</p>
+                )}
+              </div>
+              <Button isLoading={busyAction === 'class-subjects'} onClick={() => void saveClassSubjects()}>
+                Save class subjects
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

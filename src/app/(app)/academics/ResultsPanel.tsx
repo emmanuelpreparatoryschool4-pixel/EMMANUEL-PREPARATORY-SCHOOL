@@ -1,40 +1,22 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { Printer, Search, Users } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Printer, Save, Search, Users } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Select';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
+import { calculateClassResults } from '@/lib/academic-results';
 import { dataService } from '@/lib/db';
 import { formatDate, getErrorMessage } from '@/lib/utils';
 import { AcademicYear, Assessment, AssessmentScore, AssessmentType, Class, ReportCard, Student, Subject, Term } from '@/types';
-
-interface StudentSubjectResult {
-  subjectId: string;
-  subjectName: string;
-  classScore: number | null;
-  examScore: number | null;
-  totalScore: number | null;
-}
-
-interface StudentResult {
-  student: Student;
-  subjects: StudentSubjectResult[];
-  total: number;
-  average: number | null;
-  position: number | null;
-}
-
-function roundScore(value: number): number {
-  return Math.round(value * 100) / 100;
-}
 
 export function ResultsPanel() {
   const { user } = useAuth();
   const { addToast } = useToast();
   const [classes, setClasses] = useState<Class[]>([]);
+  const [studentDirectory, setStudentDirectory] = useState<Student[]>([]);
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [terms, setTerms] = useState<Term[]>([]);
   const [assessmentTypes, setAssessmentTypes] = useState<AssessmentType[]>([]);
@@ -43,6 +25,7 @@ export function ResultsPanel() {
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [scores, setScores] = useState<AssessmentScore[]>([]);
   const [classReportCards, setClassReportCards] = useState<ReportCard[]>([]);
+  const [allReportCards, setAllReportCards] = useState<ReportCard[]>([]);
   const [gradingScale, setGradingScale] = useState<Awaited<ReturnType<typeof dataService.getDefaultGradingScale>>>();
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedYearId, setSelectedYearId] = useState('');
@@ -50,27 +33,33 @@ export function ResultsPanel() {
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [destinationClassId, setDestinationClassId] = useState('');
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [scoreDrafts, setScoreDrafts] = useState<Record<string, string>>({});
   const [search, setSearch] = useState('');
+  const [resultsView, setResultsView] = useState<'entry' | 'register'>('entry');
   const [isLoading, setIsLoading] = useState(true);
   const [isPromoting, setIsPromoting] = useState(false);
+  const [isSavingScores, setIsSavingScores] = useState(false);
   const [isSavingReportStage, setIsSavingReportStage] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [refreshToken, setRefreshToken] = useState(0);
+  const selectedStudentIdRef = useRef('');
 
   useEffect(() => {
     let cancelled = false;
     async function loadOptions() {
       try {
-        const [loadedClasses, years, loadedTerms, types, loadedSubjects, defaultScale] = await Promise.all([
+        const [loadedClasses, years, loadedTerms, types, loadedSubjects, defaultScale, allStudents] = await Promise.all([
           dataService.getClasses(),
           dataService.getAcademicYears(),
           dataService.getTerms(),
           dataService.getAssessmentTypes(),
           dataService.getSubjects(),
           dataService.getDefaultGradingScale(),
+          dataService.getStudents(),
         ]);
         if (cancelled) return;
         setClasses(loadedClasses);
+        setStudentDirectory(allStudents);
         setAcademicYears(years);
         setTerms(loadedTerms);
         setAssessmentTypes(types);
@@ -101,6 +90,7 @@ export function ResultsPanel() {
         setAssessments([]);
         setScores([]);
         setClassReportCards([]);
+        setAllReportCards([]);
         return;
       }
       setLoadError('');
@@ -115,22 +105,33 @@ export function ResultsPanel() {
           assessment.academicYearId === selectedYearId &&
           assessment.termId === selectedTermId
         );
-        const scoreGroups = await Promise.all(
-          matchingAssessments.map((assessment) => dataService.getAssessmentScores(assessment.id))
+        const classScores = await dataService.getAssessmentScoresForAssessments(
+          matchingAssessments.map((assessment) => assessment.id)
         );
         if (cancelled) return;
         setStudents(classStudents);
         setAssessments(matchingAssessments);
-        setScores(scoreGroups.flat());
+        setScores(classScores);
+        setAllReportCards(allReportCards);
         setClassReportCards(allReportCards.filter((card) =>
           card.classId === selectedClassId &&
           card.academicYearId === selectedYearId &&
           card.termId === selectedTermId
         ));
         setSelectedStudentIds([]);
-        setSelectedStudentId((current) => classStudents.some((student) => student.id === current)
-          ? current
-          : classStudents[0]?.id ?? '');
+        const nextStudentId = classStudents.some((student) => student.id === selectedStudentIdRef.current)
+          ? selectedStudentIdRef.current
+          : classStudents[0]?.id ?? '';
+        selectedStudentIdRef.current = nextStudentId;
+        setSelectedStudentId(nextStudentId);
+        const savedForStudent = new Map(
+          classScores.filter((score) => score.studentId === nextStudentId)
+            .map((score) => [score.assessmentId, String(score.score)])
+        );
+        setScoreDrafts(Object.fromEntries(matchingAssessments.map((assessment) => [
+          assessment.id,
+          savedForStudent.get(assessment.id) ?? '',
+        ])));
       } catch (error) {
         if (!cancelled) setLoadError(getErrorMessage(error, 'Could not load class results.'));
       }
@@ -139,73 +140,29 @@ export function ResultsPanel() {
     return () => { cancelled = true; };
   }, [selectedClassId, selectedYearId, selectedTermId, refreshToken]);
 
-  const results = useMemo(() => {
-    const typeNames = new Map(assessmentTypes.map((type) => [type.id, type.name.toLowerCase()]));
-    const subjectNames = new Map(subjects.map((subject) => [subject.id, subject.name]));
-    const scoresByAssessmentStudent = new Map<string, number>();
-    for (const score of scores) scoresByAssessmentStudent.set(`${score.assessmentId}:${score.studentId}`, score.score);
-
-    const classSubjectIds = classes.find((schoolClass) => schoolClass.id === selectedClassId)?.subjectIds ?? [];
-    const subjectIds = classSubjectIds.length
-      ? classSubjectIds
-      : [...new Set(assessments.map((assessment) => assessment.subjectId))];
-    const rows = students.map((student): StudentResult => {
-      const subjectResults = subjectIds.map((subjectId): StudentSubjectResult => {
-        const subjectAssessments = assessments.filter((assessment) => assessment.subjectId === subjectId);
-        const classMarks: number[] = [];
-        const examMarks: number[] = [];
-        for (const assessment of subjectAssessments) {
-          const score = scoresByAssessmentStudent.get(`${assessment.id}:${student.id}`);
-          if (score === undefined) continue;
-          const percentage = Math.max(0, Math.min(100, (score / assessment.maxScore) * 100));
-          const typeName = typeNames.get(assessment.assessmentTypeId) ?? '';
-          if (typeName.includes('exam')) examMarks.push(percentage);
-          else classMarks.push(percentage);
-        }
-
-        const classScore = classMarks.length
-          ? roundScore((classMarks.reduce((sum, mark) => sum + mark, 0) / classMarks.length) * 0.3)
-          : null;
-        const examScore = examMarks.length
-          ? roundScore((examMarks.reduce((sum, mark) => sum + mark, 0) / examMarks.length) * 0.7)
-          : null;
-        return {
-          subjectId,
-          subjectName: subjectNames.get(subjectId) ?? 'Subject',
-          classScore,
-          examScore,
-          totalScore: classScore !== null && examScore !== null ? roundScore(classScore + examScore) : null,
-        };
-      });
-      const completeResults = subjectResults.filter((subject) => subject.totalScore !== null);
-      const isComplete = subjectResults.length > 0 && completeResults.length === subjectResults.length;
-      const total = roundScore(completeResults.reduce((sum, subject) => sum + (subject.totalScore ?? 0), 0));
-      return {
-        student,
-        subjects: subjectResults,
-        total,
-        average: isComplete ? roundScore(total / subjectResults.length) : null,
-        position: null,
-      };
-    });
-
-    const ranked = rows
-      .filter((row) => row.average !== null)
-      .sort((left, right) => (right.total - left.total) ||
-        `${left.student.lastName} ${left.student.firstName}`.localeCompare(`${right.student.lastName} ${right.student.firstName}`));
-    let lastTotal: number | null = null;
-    let position = 0;
-    for (let index = 0; index < ranked.length; index += 1) {
-      const row = ranked[index];
-      if (row.total !== lastTotal) position = index + 1;
-      row.position = position;
-      lastTotal = row.total;
-    }
-    return rows.sort((left, right) =>
-      (left.position ?? Number.MAX_SAFE_INTEGER) - (right.position ?? Number.MAX_SAFE_INTEGER) ||
-      `${left.student.lastName} ${left.student.firstName}`.localeCompare(`${right.student.lastName} ${right.student.firstName}`)
+  const selectStudent = (studentId: string) => {
+    selectedStudentIdRef.current = studentId;
+    setSelectedStudentId(studentId);
+    const savedForStudent = new Map(
+      scores.filter((score) => score.studentId === studentId)
+        .map((score) => [score.assessmentId, String(score.score)])
     );
-  }, [assessmentTypes, assessments, classes, scores, selectedClassId, students, subjects]);
+    setScoreDrafts(Object.fromEntries(assessments.map((assessment) => [
+      assessment.id,
+      savedForStudent.get(assessment.id) ?? '',
+    ])));
+  };
+
+  const results = useMemo(() => calculateClassResults({
+    students,
+    schoolClass: classes.find((schoolClass) => schoolClass.id === selectedClassId),
+    subjects,
+    assessments,
+    assessmentTypes,
+    scores,
+    gradingScale,
+    reportCards: classReportCards,
+  }), [assessmentTypes, assessments, classes, classReportCards, gradingScale, scores, selectedClassId, students, subjects]);
 
   const resultSubjects = [...new Map(
     results.flatMap((result) => result.subjects.map((subject) => [subject.subjectId, subject.subjectName] as const))
@@ -253,6 +210,76 @@ export function ResultsPanel() {
       : classReportCards.length > 0
         ? 'Draft'
         : 'Not started';
+  const selectedStudentCard = classReportCards.find((card) => card.studentId === selectedStudentId);
+
+  const saveStudentScores = async (status: 'draft' | 'submitted') => {
+    if (!selectedStudentResult || !assessments.length) {
+      addToast({ type: 'error', title: 'No assessments to save', message: 'Create assessments for this class before entering results.' });
+      return;
+    }
+    if (selectedStudentCard?.status === 'published') {
+      addToast({ type: 'error', title: 'Report card is published', message: 'An authorized administrator must reopen the report cards before scores can be changed.' });
+      return;
+    }
+    const invalidScore = assessments.find((assessment) => {
+      const rawValue = scoreDrafts[assessment.id] ?? '';
+      if (rawValue.trim() === '') return false;
+      const value = Number(rawValue);
+      return !Number.isFinite(value) || value < 0 || value > assessment.maxScore;
+    });
+    if (invalidScore) {
+      addToast({
+        type: 'error',
+        title: 'Check the entered scores',
+        message: `${invalidScore.name} must be between zero and ${invalidScore.maxScore}.`,
+      });
+      return;
+    }
+    if (status === 'submitted') {
+      const incompleteSubject = selectedStudentResult.subjects.find((subject) => {
+        const weight = subject.components.reduce((sum, component) => sum + component.assessment.weight, 0);
+        return !subject.components.length ||
+          Math.abs(weight - 100) >= 0.01 ||
+          subject.components.some((component) => (scoreDrafts[component.assessment.id] ?? '').trim() === '');
+      });
+      if (incompleteSubject) {
+        addToast({
+          type: 'error',
+          title: 'Results are incomplete',
+          message: `${incompleteSubject.subjectName} needs a score for every assessment and assessment weights totaling 100%.`,
+        });
+        return;
+      }
+    }
+    setIsSavingScores(true);
+    try {
+      await dataService.saveStudentAssessmentScores(
+        selectedStudentResult.student.id,
+        assessments.map((assessment) => {
+          const value = (scoreDrafts[assessment.id] ?? '').trim();
+          return {
+            assessmentId: assessment.id,
+            score: value === '' ? null : Number(value),
+          };
+        }),
+        status
+      );
+      addToast({
+        type: 'success',
+        title: status === 'draft' ? 'Scores saved as draft' : 'Results saved',
+        message: `${selectedStudentResult.student.firstName}'s scores have been saved.`,
+      });
+      setRefreshToken((current) => current + 1);
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Could not save scores',
+        message: getErrorMessage(error, 'The results were not saved.'),
+      });
+    } finally {
+      setIsSavingScores(false);
+    }
+  };
 
   const saveReportStage = async (status: ReportCard['status']) => {
     if (!allResultsComplete) {
@@ -288,7 +315,7 @@ export function ResultsPanel() {
         academicYearId: selectedYearId,
         subjects: result.subjects.map((subject) => {
           const finalScore = subject.totalScore;
-          if (finalScore === null || subject.classScore === null || subject.examScore === null) {
+          if (finalScore === null || subject.components.some((component) => component.score === null)) {
             throw new Error(`${result.student.firstName} ${result.student.lastName} has incomplete subject scores.`);
           }
           const grade = gradingScale.grades.find((candidate) =>
@@ -298,16 +325,36 @@ export function ResultsPanel() {
           return {
             subjectId: subject.subjectId,
             subjectName: subject.subjectName,
-            classScore: subject.classScore,
-            examScore: subject.examScore,
             totalScore: finalScore,
             grade: grade.grade,
             remark: grade.remark,
+            components: subject.components.map((component) => ({
+              assessmentId: component.assessment.id,
+              assessmentName: component.assessment.name,
+              assessmentTypeName: component.assessmentTypeName,
+              score: component.score as number,
+              maxScore: component.assessment.maxScore,
+              weight: component.assessment.weight,
+              weightedScore: component.weightedScore ?? 0,
+            })),
           };
         }),
         totalScore: result.total,
         averageScore: result.average ?? 0,
+        overallGrade: result.grade ?? undefined,
+        overallRemark: gradingScale.grades.find((candidate) =>
+          result.average !== null &&
+          result.average >= candidate.minScore &&
+          result.average <= candidate.maxScore
+        )?.remark,
         position: result.position ?? undefined,
+        calculationSnapshot: {
+          version: 1,
+          rankingMethod: gradingScale.calculationRules?.rankingMethod ?? 'competition',
+          capturedAt: new Date().toISOString(),
+          gradingScaleId: gradingScale.id,
+          gradingScale: { name: gradingScale.name, grades: gradingScale.grades },
+        },
         attendancePresent: attendanceRows.filter((record) =>
           record.studentId === result.student.id && record.status === 'present'
         ).length,
@@ -428,15 +475,6 @@ export function ResultsPanel() {
             value={selectedClassId}
             onChange={(event) => setSelectedClassId(event.target.value)}
           />
-          <Select
-            label="Student result"
-            options={students.map((student) => ({
-              value: student.id,
-              label: `${student.lastName}, ${student.firstName} (${student.admissionNumber})`,
-            }))}
-            value={selectedStudentId}
-            onChange={(event) => setSelectedStudentId(event.target.value)}
-          />
           <div className="flex items-end">
             <Button type="button" variant="outline" className="w-full" leftIcon={<Printer className="h-4 w-4" />} onClick={() => window.print()} disabled={!results.length}>
               Print results
@@ -447,7 +485,88 @@ export function ResultsPanel() {
 
       {loadError && <p role="alert" className="text-sm text-red-700">{loadError}</p>}
 
-      {selectedStudentResult && (
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {classes.filter((schoolClass) => schoolClass.academicYearId === selectedYearId && schoolClass.status === 'active').map((schoolClass) => {
+          const enrolled = studentDirectory.filter((student) =>
+            student.currentClassId === schoolClass.id &&
+            student.academicYearId === selectedYearId &&
+            student.enrollmentStatus === 'active'
+          ).length;
+          const classCards = allReportCards.filter((card) =>
+            card.classId === schoolClass.id && card.academicYearId === selectedYearId && card.termId === selectedTermId
+          );
+          const completed = classCards.filter((card) => card.status === 'published').length;
+          const progress = enrolled ? Math.round((completed / enrolled) * 100) : 0;
+          return (
+            <button
+              type="button"
+              key={schoolClass.id}
+              onClick={() => {
+                setSelectedClassId(schoolClass.id);
+                setResultsView('entry');
+              }}
+              className={`rounded-xl border p-4 text-left transition hover:border-primary-400 ${selectedClassId === schoolClass.id ? 'border-primary-500 bg-primary-50' : 'border-gray-200 bg-white'}`}
+            >
+              <span className="block font-semibold text-gray-900">{className(classes, schoolClass.id)}</span>
+              <span className="mt-1 block text-sm text-gray-500">{enrolled} students · {schoolClass.subjectIds?.length ?? 0} subjects</span>
+              <span className="mt-2 block text-xs text-gray-500">Published results: {completed}/{enrolled} ({progress}%)</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant={resultsView === 'entry' ? 'primary' : 'outline'} onClick={() => setResultsView('entry')}>Student score entry</Button>
+        <Button size="sm" variant={resultsView === 'register' ? 'primary' : 'outline'} onClick={() => setResultsView('register')}>Class results register</Button>
+      </div>
+
+      {resultsView === 'entry' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Students in {className(classes, selectedClassId)}</CardTitle>
+            <label className="relative block w-full sm:max-w-sm">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+              <input aria-label="Search students" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by name or admission number" className="min-h-11 w-full rounded-lg border border-gray-300 pl-9 pr-3 text-sm" />
+            </label>
+          </CardHeader>
+          <CardContent>
+            {!visibleResults.length ? (
+              <p className="py-6 text-center text-sm text-gray-500">No students match this search.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50"><tr>
+                    <th className="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Student</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Admission number</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Results status</th>
+                    <th className="px-3 py-3 text-right text-xs font-medium uppercase text-gray-500">Action</th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {visibleResults.map((result) => (
+                      <tr key={result.student.id} className={selectedStudentId === result.student.id ? 'bg-primary-50' : ''}>
+                        <td className="px-3 py-3 text-sm font-medium">{result.student.firstName} {result.student.otherNames ?? ''} {result.student.lastName}</td>
+                        <td className="px-3 py-3 text-sm">{result.student.admissionNumber}</td>
+                        <td className="px-3 py-3 text-sm">{result.isComplete
+                          ? 'Complete'
+                          : result.subjects.some((subject) => subject.components.some((component) => component.score !== null))
+                            ? 'Draft or incomplete'
+                            : 'Not started'}</td>
+                        <td className="px-3 py-3 text-right">
+                          <Button size="sm" variant="outline" onClick={() => selectStudent(result.student.id)}>
+                            Enter or edit results
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {selectedStudentResult && resultsView === 'entry' && (
         <Card>
           <CardHeader>
             <div>
@@ -465,45 +584,105 @@ export function ResultsPanel() {
           </CardHeader>
           <CardContent>
             {selectedStudentResult.subjects.length === 0 ? (
-              <p className="py-6 text-center text-sm text-gray-500">No class-score or examination assessments have been set up for this term.</p>
+              <p className="py-6 text-center text-sm text-gray-500">Assign subjects to this class and create assessments before entering scores.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50"><tr>
-                    <th className="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Subject</th>
-                    <th className="px-3 py-3 text-right text-xs font-medium uppercase text-gray-500">Class score / 30</th>
-                    <th className="px-3 py-3 text-right text-xs font-medium uppercase text-gray-500">Exam / 70</th>
-                    <th className="px-3 py-3 text-right text-xs font-medium uppercase text-gray-500">Final / 100</th>
-                  </tr></thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {selectedStudentResult.subjects.map((subject) => (
-                      <tr key={subject.subjectId}>
-                        <td className="px-3 py-3 text-sm font-medium text-gray-900">{subject.subjectName}</td>
-                        <td className="px-3 py-3 text-right text-sm">{subject.classScore?.toFixed(2) ?? 'Pending'}</td>
-                        <td className="px-3 py-3 text-right text-sm">{subject.examScore?.toFixed(2) ?? 'Pending'}</td>
-                        <td className="px-3 py-3 text-right text-sm font-semibold">{subject.totalScore?.toFixed(2) ?? 'Pending'}</td>
+              <div className="space-y-4">
+                {selectedStudentCard?.status === 'published' && (
+                  <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">This report card is published. An owner or headmaster must reopen it before scores can be edited.</p>
+                )}
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50"><tr>
+                      <th className="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Subject</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Assessment component</th>
+                      <th className="px-3 py-3 text-right text-xs font-medium uppercase text-gray-500">Score / maximum</th>
+                      <th className="px-3 py-3 text-right text-xs font-medium uppercase text-gray-500">Weight</th>
+                      <th className="px-3 py-3 text-right text-xs font-medium uppercase text-gray-500">Weighted score</th>
+                    </tr></thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {selectedStudentResult.subjects.map((subject) => (
+                        subject.components.length ? subject.components.map((component, index) => (
+                          <tr key={component.assessment.id}>
+                            <td className="px-3 py-3 text-sm font-medium text-gray-900">{index === 0 ? subject.subjectName : ''}</td>
+                            <td className="px-3 py-3 text-sm">{component.assessment.name}<span className="ml-1 text-xs text-gray-500">· {component.assessmentTypeName}</span></td>
+                            <td className="px-3 py-3 text-right">
+                              <div className="inline-flex items-center gap-2">
+                                <input
+                                  aria-label={`${subject.subjectName} ${component.assessment.name} score`}
+                                  type="number"
+                                  min="0"
+                                  max={component.assessment.maxScore}
+                                  step="0.01"
+                                  disabled={selectedStudentCard?.status === 'published'}
+                                  value={scoreDrafts[component.assessment.id] ?? ''}
+                                  onChange={(event) => setScoreDrafts((current) => ({ ...current, [component.assessment.id]: event.target.value }))}
+                                  className="min-h-10 w-24 rounded-md border border-gray-300 px-2 text-right text-sm disabled:bg-gray-100"
+                                />
+                                <span className="text-sm text-gray-500">/ {component.assessment.maxScore}</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-3 text-right text-sm">{component.assessment.weight}%</td>
+                            <td className="px-3 py-3 text-right text-sm">{component.weightedScore?.toFixed(2) ?? '—'}</td>
+                          </tr>
+                        )) : (
+                          <tr key={subject.subjectId}>
+                            <td className="px-3 py-3 text-sm font-medium">{subject.subjectName}</td>
+                            <td colSpan={4} className="px-3 py-3 text-sm text-amber-700">No assessments have been created for this subject.</td>
+                          </tr>
+                        )
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-gray-50">
+                      {selectedStudentResult.subjects.map((subject) => {
+                        const weight = subject.components.reduce((sum, component) => sum + component.assessment.weight, 0);
+                        return (
+                          <tr key={subject.subjectId}>
+                            <td colSpan={4} className="px-3 py-2 text-right text-sm font-medium">
+                              {subject.subjectName} · {Math.round(weight * 100) / 100}% configured
+                            </td>
+                            <td className="px-3 py-2 text-right text-sm font-semibold">{subject.totalScore?.toFixed(2) ?? 'Incomplete'}</td>
+                          </tr>
+                        );
+                      })}
+                      <tr>
+                        <td colSpan={4} className="px-3 py-3 text-right text-sm font-semibold">Overall average</td>
+                        <td className="px-3 py-3 text-right text-sm font-semibold">{selectedStudentResult.average?.toFixed(2) ?? 'Incomplete'}</td>
                       </tr>
-                    ))}
-                    <tr className="bg-gray-50 font-semibold">
-                      <td className="px-3 py-3 text-sm">Overall</td>
-                      <td colSpan={2} className="px-3 py-3 text-right text-sm">Total across {selectedStudentResult.subjects.length} subject(s)</td>
-                      <td className="px-3 py-3 text-right text-sm">
-                        {selectedStudentResult.average === null ? 'Pending' : `${selectedStudentResult.total.toFixed(2)} (${selectedStudentResult.average.toFixed(2)} avg)`}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                    </tfoot>
+                  </table>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    leftIcon={<Save className="h-4 w-4" />}
+                    isLoading={isSavingScores}
+                    disabled={selectedStudentCard?.status === 'published' || !assessments.length}
+                    onClick={() => void saveStudentScores('draft')}
+                  >
+                    Save draft
+                  </Button>
+                  <Button
+                    type="button"
+                    leftIcon={<Save className="h-4 w-4" />}
+                    isLoading={isSavingScores}
+                    disabled={selectedStudentCard?.status === 'published' || !assessments.length}
+                    onClick={() => void saveStudentScores('submitted')}
+                  >
+                    Save results
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
         </Card>
       )}
 
-      <Card>
+      {resultsView === 'register' && <Card>
         <CardHeader>
           <div>
-            <CardTitle>Class ranking</CardTitle>
-            <p className="mt-1 text-sm text-gray-500">Students are ranked only after class and exam marks are entered for every assessed subject.</p>
+            <CardTitle>Consolidated class results</CardTitle>
+            <p className="mt-1 text-sm text-gray-500">Totals use each assessment’s configured contribution. Incomplete results are not ranked.</p>
           </div>
           <span className="text-sm text-gray-500">{results.length} active students</span>
         </CardHeader>
@@ -602,6 +781,8 @@ export function ResultsPanel() {
                     ))}
                     <th className="px-3 py-3 text-right text-xs font-medium uppercase text-gray-500">Total</th>
                     <th className="px-3 py-3 text-right text-xs font-medium uppercase text-gray-500">Average</th>
+                    <th className="px-3 py-3 text-right text-xs font-medium uppercase text-gray-500">Grade</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Completion</th>
                   </tr></thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
                     {visibleResults.map((result) => (
@@ -622,17 +803,38 @@ export function ResultsPanel() {
                         )}
                         <td className="px-3 py-3 text-sm font-semibold">{result.position ?? '—'}</td>
                         <td className="whitespace-nowrap px-3 py-3 text-sm">
-                          <button type="button" className="text-left font-medium text-primary-700 hover:underline print:text-black" onClick={() => setSelectedStudentId(result.student.id)}>
+                          <button type="button" className="text-left font-medium text-primary-700 hover:underline print:text-black" onClick={() => {
+                            selectStudent(result.student.id);
+                            setResultsView('entry');
+                          }}>
                             {result.student.lastName}, {result.student.firstName} {result.student.otherNames ?? ''}
                           </button>
                           <p className="text-xs text-gray-500">{result.student.admissionNumber}</p>
                         </td>
                         {resultSubjects.map(([subjectId]) => {
                           const subject = result.subjects.find((item) => item.subjectId === subjectId);
-                          return <td key={subjectId} className="px-3 py-3 text-right text-sm">{subject?.totalScore?.toFixed(2) ?? '—'}</td>;
+                          return (
+                            <td key={subjectId} className="px-3 py-3 text-right text-sm">
+                              {subject?.components.length ? (
+                                <details className="text-left">
+                                  <summary className="cursor-pointer text-right">{subject.totalScore?.toFixed(2) ?? 'Incomplete'}</summary>
+                                  <div className="min-w-48 py-2 text-xs">
+                                    <p className="font-semibold">Grade: {subject.grade ?? '—'}</p>
+                                    {subject.components.map((component) => (
+                                      <p key={component.assessment.id}>
+                                        {component.assessment.name}: {component.score ?? '—'}/{component.assessment.maxScore} ({component.assessment.weight}%)
+                                      </p>
+                                    ))}
+                                  </div>
+                                </details>
+                              ) : '—'}
+                            </td>
+                          );
                         })}
                         <td className="px-3 py-3 text-right text-sm font-semibold">{result.average === null ? 'Incomplete' : result.total.toFixed(2)}</td>
                         <td className="px-3 py-3 text-right text-sm">{result.average?.toFixed(2) ?? '—'}</td>
+                        <td className="px-3 py-3 text-right text-sm">{result.grade ?? '—'}</td>
+                        <td className="px-3 py-3 text-sm">{result.isComplete ? 'Complete' : 'Incomplete'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -641,7 +843,7 @@ export function ResultsPanel() {
             </>
           )}
         </CardContent>
-      </Card>
+      </Card>}
       <p className="text-xs text-gray-500 print:block">
         Results for {className(classes, selectedClassId)} · {termName(terms, selectedTermId)} · Printed {formatDate(new Date().toISOString())}
       </p>

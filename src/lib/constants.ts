@@ -154,8 +154,6 @@ export const DEFAULT_FEE_CATEGORIES = [
 export const DEFAULT_ASSESSMENT_TYPES = [
   { name: 'Class Test', defaultWeight: 30, defaultMaxScore: 100 },
   { name: 'Examination', defaultWeight: 70, defaultMaxScore: 100 },
-  { name: 'Assignment', defaultWeight: 10, defaultMaxScore: 100 },
-  { name: 'Project', defaultWeight: 20, defaultMaxScore: 100 },
 ];
 
 export const DEFAULT_GRADING_SCALE = {

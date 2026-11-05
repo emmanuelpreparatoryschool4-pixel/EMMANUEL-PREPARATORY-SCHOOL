@@ -28,7 +28,7 @@ export default function NewAssessmentPage() {
 
   const { register, handleSubmit, control, formState: { errors }, setValue } = useForm<AssessmentFormValues>({
     resolver: zodResolver(assessmentSchema),
-    defaultValues: { maxScore: 100, weight: 30, date: new Date().toISOString().split('T')[0] },
+    defaultValues: { maxScore: 100, weight: 1, date: new Date().toISOString().split('T')[0] },
   });
 
   const selectedYear = useWatch({ control, name: 'academicYearId' });
@@ -48,7 +48,7 @@ export default function NewAssessmentPage() {
       setSubjects(s);
       setAcademicYears(y);
       setTerms(t);
-      setAssessmentTypes(at);
+      setAssessmentTypes(at.filter((type) => type.status === 'active'));
       const currentYear = y.find((yr) => yr.isCurrent);
       const currentTerm = t.find((tm) => tm.isCurrent && tm.academicYearId === currentYear?.id) ??
         t.find((tm) => tm.academicYearId === currentYear?.id);
@@ -63,8 +63,8 @@ export default function NewAssessmentPage() {
   useEffect(() => {
     const type = assessmentTypes.find((t) => t.id === selectedType);
     if (type) {
-      setValue('weight', type.name.toLowerCase().includes('exam') ? 70 : 30);
-      setValue('maxScore', 100);
+      setValue('weight', type.defaultWeight);
+      setValue('maxScore', type.defaultMaxScore);
     }
   }, [selectedType, assessmentTypes, setValue]);
 
@@ -102,8 +102,6 @@ export default function NewAssessmentPage() {
       }
       await dataService.addAssessment({
         ...data,
-        maxScore: 100,
-        weight: type.name.toLowerCase().includes('exam') ? 70 : 30,
         status: 'draft',
       });
       addToast({ type: 'success', title: 'Assessment created' });
@@ -159,8 +157,8 @@ export default function NewAssessmentPage() {
               })}
             />
             <Select label="Term" required options={filteredTerms.map((t) => ({ value: t.id, label: t.name }))} error={errors.termId?.message} {...register('termId')} />
-            <Input label="Maximum Score" type="number" required readOnly error={errors.maxScore?.message} {...register('maxScore', { valueAsNumber: true })} />
-            <Input label="Weight (%)" type="number" required readOnly error={errors.weight?.message} {...register('weight', { valueAsNumber: true })} hint="Class assessments contribute 30%; examinations contribute 70%." />
+            <Input label="Maximum Score" type="number" min="0.01" step="0.01" required error={errors.maxScore?.message} {...register('maxScore', { valueAsNumber: true })} />
+            <Input label="Contribution to subject total (%)" type="number" min="0.01" max="100" step="0.01" required error={errors.weight?.message} {...register('weight', { valueAsNumber: true })} hint="For each subject and term, assessment contributions must total 100%." />
             <Input label="Date" type="date" required error={errors.date?.message} {...register('date')} />
           </CardContent>
         </Card>
