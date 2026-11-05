@@ -5,6 +5,7 @@ import { Menu, LogOut, User, ChevronDown } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar } from '@/components/ui/Avatar';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 interface TopBarProps {
   onMenuClick: () => void;
@@ -12,8 +13,28 @@ interface TopBarProps {
 
 export function TopBar({ onMenuClick }: TopBarProps) {
   const { user, logout } = useAuth();
+  const pathname = usePathname();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const currentPageTitle = pathname === '/dashboard'
+    ? 'Dashboard'
+    : pathname.startsWith('/students')
+      ? 'Students'
+      : pathname.startsWith('/classes')
+        ? 'Classes & Enrollment'
+        : pathname.startsWith('/academics')
+          ? 'Academics & Results'
+          : pathname.startsWith('/fees')
+            ? 'Fees & Payments'
+            : pathname.startsWith('/reports')
+              ? 'Reports'
+              : pathname.startsWith('/statistics')
+                ? 'School Statistics'
+                : pathname.startsWith('/settings')
+                  ? 'Settings'
+                  : pathname.startsWith('/activity')
+                    ? 'Activity History'
+                    : 'School';
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -35,6 +56,12 @@ export function TopBar({ onMenuClick }: TopBarProps) {
         >
           <Menu className="h-5 w-5" />
         </button>
+        <div className="lg:hidden">
+          <h1 className="max-w-[52vw] truncate text-sm font-semibold text-gray-900 sm:text-base">
+            {currentPageTitle}
+          </h1>
+          <p className="hidden text-xs text-gray-500 sm:block">E.P.S. School Management</p>
+        </div>
         <div className="hidden lg:block">
           <h2 className="text-sm font-medium text-gray-500">
             Welcome back, <span className="text-gray-900">{user?.name}</span>

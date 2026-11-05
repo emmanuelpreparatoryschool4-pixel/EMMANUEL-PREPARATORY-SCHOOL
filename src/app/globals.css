@@ -27,6 +27,30 @@
   }
 }
 
+.app-route-progress {
+  position: fixed;
+  inset: 0 auto auto 0;
+  z-index: 100;
+  height: 3px;
+  width: 35%;
+  transform-origin: left;
+  background: linear-gradient(90deg, #2563eb, #60a5fa);
+  box-shadow: 0 0 10px rgb(37 99 235 / 35%);
+  animation: app-route-progress 900ms ease-in-out infinite alternate;
+}
+
+@keyframes app-route-progress {
+  from { transform: translateX(0) scaleX(0.65); }
+  to { transform: translateX(185%) scaleX(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-route-progress {
+    animation: none;
+    width: 100%;
+  }
+}
+
 @media print {
   @page {
     size: landscape;

@@ -17,7 +17,15 @@ interface SidebarProps {
   onClose: () => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  onMoreClick: () => void;
 }
+
+const mobileNavItems = [
+  { label: 'Home', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Students', href: '/students', icon: Users },
+  { label: 'Classes', href: '/classes', icon: School },
+  { label: 'Academics', href: '/academics', icon: BookOpen },
+];
 
 const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['owner', 'headmaster', 'assistant_headmaster'] },
@@ -31,7 +39,7 @@ const navItems = [
   { label: 'Activity History', href: '/activity', icon: History, roles: ['owner', 'headmaster', 'assistant_headmaster'] },
 ];
 
-export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: SidebarProps) {
+export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse, onMoreClick }: SidebarProps) {
   const pathname = usePathname();
   const { user } = useAuth();
   const { isInstalled, installApp } = usePWAInstall();
@@ -39,6 +47,9 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
 
   const filteredItems = navItems.filter(
     (item) => user && item.roles.includes(user.role)
+  );
+  const isMobilePrimaryRoute = mobileNavItems.some((item) =>
+    pathname === item.href || pathname.startsWith(`${item.href}/`)
   );
 
   const handleInstall = async () => {
@@ -166,6 +177,52 @@ export function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }: Sideba
           </button>
         </div>
       </aside>
+      <nav
+        aria-label="Primary navigation"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden"
+      >
+        <ul className="mx-auto grid h-16 max-w-xl grid-cols-5 items-stretch px-1">
+          {mobileNavItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            return (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  onClick={onClose}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={cn(
+                    'flex h-full flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-medium transition-colors',
+                    isActive ? 'text-primary-700' : 'text-gray-500 active:bg-gray-100'
+                  )}
+                >
+                  <Icon className={cn('h-5 w-5', isActive && 'stroke-[2.5]')} />
+                  <span>{item.label}</span>
+                </Link>
+              </li>
+            );
+          })}
+          <li>
+            <button
+              type="button"
+              onClick={onMoreClick}
+              aria-expanded={isOpen}
+              aria-label="Open more navigation options"
+              className={cn(
+                'flex h-full w-full flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-medium transition-colors',
+                !isMobilePrimaryRoute || isOpen ? 'text-primary-700' : 'text-gray-500 active:bg-gray-100'
+              )}
+            >
+              <span className="flex h-5 items-center gap-0.5">
+                <span className="h-1 w-1 rounded-full bg-current" />
+                <span className="h-1 w-1 rounded-full bg-current" />
+                <span className="h-1 w-1 rounded-full bg-current" />
+              </span>
+              <span>More</span>
+            </button>
+          </li>
+        </ul>
+      </nav>
     </>
   );
 }
